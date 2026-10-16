@@ -30,6 +30,11 @@ inputs:
     description: >-
       可选 PAT（仅 public_repo）。star 超过 6000 个时才需要。
       复合 action 拿不到 secrets 上下文，建议改用 env: GH_TOKEN 传入（会被自动掩码）。
+  scripts_ref:
+    description: >-
+      仅用于本地调试：指定从哪个 ref 下载 scripts/。
+      正常调用不需要这个——action 自带的脚本就在 github.action_path 下。
+      注意 action.yml 里拿不到 vars 上下文，所以版本固定请改用 @<tag> 的引用方式。
 
 runs:
   using: composite
@@ -42,21 +47,24 @@ runs:
       shell: bash
       env:
         OPSSTAR_REPO: maxzhang666/OpsStar
-        OPSSTAR_REF: ${{ vars.OPSSTAR_REF }}
+        OPSSTAR_REF: ${{ inputs.scripts_ref }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
         # 复合 action 的文件由 runner 自动下载到 github.action_path，
-        # 通常无需再取一次；但若 action 目录里没有 scripts/（例如本地开发时），回退到下载。
+        # 通常无需再取一次；仅当action 目录里没有 scripts/（如本地调试）才回退下载。
+        #注意不要往 $ACTION_PATH 写：那是 runner 的只读缓存目录。
         if [ -f "$ACTION_PATH/scripts/fetch_stars.py" ]; then
           SCRIPTS="$ACTION_PATH/scripts"
           echo "✅ 使用随 action 分发的脚本：$SCRIPTS"
         else
           REF="${OPSSTAR_REF:-main}"
+          DL="$RUNNER_TEMP/opsstar-download"
           URL="https://codeload.github.com/${OPSSTAR_REPO}/tar.gz/${REF}"
-          curl -fsSL "$URL" -o "$ACTION_PATH/repo.tar.gz"
-          mkdir -p "$ACTION_PATH/repo"
-          tar -xzf "$ACTION_PATH/repo.tar.gz" -C "$ACTION_PATH/repo" --strip-components=1
-          SCRIPTS="$ACTION_PATH/repo/scripts"
+          mkdir -p "$DL"
+          curl -fsSL "$URL" -o "$DL/repo.tar.gz"
+          mkdir -p "$DL/repo"
+          tar -xzf "$DL/repo.tar.gz" -C "$DL/repo" --strip-components=1
+          SCRIPTS="$DL/repo/scripts"
           test -f "$SCRIPTS/fetch_stars.py" || { echo "❌ 未取到 scripts/fetch_stars.py"; exit 1; }
           echo "✅ 已取得 ${OPSSTAR_REPO}@${REF} 的 scripts/"
         fi
