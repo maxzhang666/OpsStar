@@ -139,19 +139,18 @@
 
   const langDot = l => l
     ? `<span class="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span class="size-2 shrink-0 rounded-full" style="background:${esc(langColor(l))}"></span>${esc(l)}</span>`
-    : badge(t('filter.noLang'));
+    : '';
 
   const licenseBadge = lic => {
-    if (!lic || lic === 'NOASSERTION') return badge(t('repo.noLicense'), 'border-amber-500/30 text-amber-700 dark:text-amber-300');
+    if (!lic || lic === 'NOASSERTION') return '';
     return badge(esc(lic), 'border-border');
   };
 
-  // 有些仓库既没语言也没 license（38/1222）。两个「无…」并排很吵，
-// 所以两者都缺时只显示一个中性标记，不重复占位。
+  // 缺字段就不显示徽标，不用「无语言」「无许可证」占位——那只是噪音。
   function metaBadges(r) {
     const noLang = !r.lang, noLic = !r.license || r.license === 'NOASSERTION';
-    if (noLang && noLic) return badge(esc(t('repo.noMeta')), 'border-border');
-    return (noLang ? badge(esc(t('filter.noLang'))) : langDot(r.lang)) + licenseBadge(r.license);
+    if (!noLang && noLic) return '';
+    return (noLang ? '' : langDot(r.lang)) + licenseBadge(r.license);
   }
 
   // star 数据里没有评分，卡片右上角改显 star 数
@@ -175,13 +174,14 @@
             </span>
           </div>
           <p class="mt-0.5 truncate text-xs text-muted-foreground">${esc(r.owner)}</p>
-          <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">${r.desc ? esc(r.desc) : `<span class="italic opacity-60">${esc(t('repo.noDesc'))}</span>`}</p>
+          <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">${r.desc ? esc(r.desc) : ''}</p>
         </div>
       </div>
       ${r.archived ? `<div>${badge(icon('archive', 'size-3') + esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300')}</div>` : ''}
-      <div class="mt-auto flex flex-wrap items-center gap-1">
-        ${metaBadges(r)}${r.isFork ? badge(esc(t('repo.fork'))) : ''}
-      </div>
+      ${(() => {
+        const row = metaBadges(r) + (r.isFork ? badge(esc(t('repo.fork'))) : '');
+        return row ? `<div class="mt-auto flex flex-wrap items-center gap-1">${row}</div>` : '';
+      })()}
       ${r.topics && r.topics.length ? `<div class="flex flex-wrap gap-1">${r.topics.slice(0, 3).map(x => badge('#' + esc(x))).join('')}${r.topics.length > 3 ? badge('+' + (r.topics.length - 3)) : ''}</div>` : ''}
       <div class="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
         <span class="inline-flex items-center gap-1">${icon('clock', 'size-3')}${esc(fmtAgo(r.pushedAgo))}</span>
@@ -206,7 +206,7 @@
           ${r.archived ? badge(esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300') : ''}
           <span class="inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground tabular-nums">${icon('star', 'size-3 fill-amber-400 text-amber-400')}${fmtNum(r.stars)}</span>
         </div>
-        <p class="truncate text-sm text-muted-foreground">${esc(r.desc || t('repo.noDesc'))}</p>
+        ${r.desc ? `<p class="truncate text-sm text-muted-foreground">${esc(r.desc)}</p>` : ''}
       </div>
       <div class="hidden shrink-0 items-center gap-3 md:flex">
         ${metaBadges(r)}
@@ -360,7 +360,7 @@
   function langBars(langs) {
     const entries = Object.entries(langs || {}).sort((a, b) => b[1] - a[1]);
     if (!entries.length) {
-      return `<p class="text-[11px] text-muted-foreground">${esc(t('drawer.noLangs'))}</p>`;
+      return '';
     }
     const total = entries.reduce((s, [, v]) => s + v, 0);
     const shown = entries.slice(0, 8);
@@ -413,11 +413,14 @@
       </header>
 
       <div class="scroll-slim flex-1 overflow-y-auto px-5 py-4">
-        ${r.desc
-          ? `<p class="text-sm leading-relaxed">${esc(r.desc)}</p>`
-          : `<p class="text-sm italic text-muted-foreground">${esc(t('repo.noDesc'))}</p>`}
+        ${r.desc ? `<p class="text-sm leading-relaxed">${esc(r.desc)}</p>` : ''}
 
-        <div class="mt-3 flex flex-wrap gap-1">${metaBadges(r)}${r.isFork ? badge(esc(t('repo.fork'))) : ''}${r.archived ? badge(icon('archive', 'size-3') + esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300') : ''}</div>
+        ${(() => {
+          const extras = [r.isFork ? badge(esc(t('repo.fork'))) : '',
+                          r.archived ? badge(icon('archive', 'size-3') + esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300') : ''].join('');
+          const row = metaBadges(r) + extras;
+          return row ? `<div class="mt-3 flex flex-wrap gap-1">${row}</div>` : '';
+        })()}
 
         ${r.homepage ? `<a href="${esc(r.homepage)}" target="_blank" rel="noopener noreferrer"
             class="mt-3 flex items-center gap-1.5 truncate text-xs text-brand hover:underline underline-offset-4">
@@ -447,10 +450,14 @@
           </dl>
         </section>
 
-        <section class="mt-6">
+        ${(() => {
+          const bars = langBars(r.langs);
+          if (!bars) return '';
+          return `<section class="mt-6">
           <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.languages'))}</h3>
-          ${langBars(r.langs)}
-        </section>
+          ${bars}
+        </section>`;
+        })()}
 
         ${r.topics && r.topics.length ? `
         <section class="mt-6">
@@ -464,8 +471,7 @@
           <div class="flex flex-wrap gap-1">${features.map(x => badge(esc(x))).join('')}</div>
         </section>` : ''}
 
-        <section id="readmeSection" class="mt-6 hidden">
-          <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.readme'))}</h3>
+                <section id="readmeSection" class="mt-6 hidden" aria-live="polite">
           <div id="readmeBody" class="text-sm leading-relaxed"></div>
         </section>
       </div>
