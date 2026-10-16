@@ -570,8 +570,9 @@
     let x = esc(s);
     // 缩略链接 ![alt](url) → alt 文本
     x = x.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
-    // 链接。README 来自任意第三方仓库，javascript:/data: 这类伪协议必须拦掉，
-    // 否则点一下就执行脚本。只放行 http(s)、站内相对路径和锚点。
+    // 链接。README 由被收录的仓库提供，内容不可信，
+    // javascript:/data: 这类伪协议必须拦掉，否则点一下就执行脚本。
+    // 只放行 http(s)、站内相对路径和锚点。
     x = x.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, txt, href) => {
       const safe = /^(https?:\/\/|#)/i.test(href) ? href : base + href;
       return `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${txt}</a>`;
