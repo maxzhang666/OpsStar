@@ -34,7 +34,7 @@ window.I18N = {
 
     'repo.stars': '{n} star', 'repo.forks': '{n} fork', 'repo.fork': 'fork',
     'repo.archived': '已归档', 'repo.noDesc': '这个仓库没有写简介',
-    'repo.license': '许可证', 'repo.noLicense': '无许可证',
+    'repo.license': '许可证', 'repo.noLicense': '无许可证', 'repo.noMeta': '未标注',
     'repo.updated': '更新于', 'repo.created': '创建于',
     'repo.starred': '收藏于', 'repo.issues': '{n} 个 issue',
     'repo.visit': '访问仓库',
@@ -87,7 +87,7 @@ window.I18N = {
 
     'repo.stars': '{n} stars', 'repo.forks': '{n} forks', 'repo.fork': 'fork',
     'repo.archived': 'Archived', 'repo.noDesc': 'This repo has no description',
-    'repo.license': 'License', 'repo.noLicense': 'No license',
+    'repo.license': 'License', 'repo.noLicense': 'No license', 'repo.noMeta': 'Unlabeled',
     'repo.updated': 'Updated', 'repo.created': 'Created',
     'repo.starred': 'Starred', 'repo.issues': '{n} open issues',
     'repo.visit': 'Visit repository',

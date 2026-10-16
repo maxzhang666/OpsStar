@@ -130,6 +130,14 @@
     return badge(esc(lic), 'border-border');
   };
 
+  // 有些仓库既没语言也没 license（38/1222）。两个「无…」并排很吵，
+// 所以两者都缺时只显示一个中性标记，不重复占位。
+  function metaBadges(r) {
+    const noLang = !r.lang, noLic = !r.license || r.license === 'NOASSERTION';
+    if (noLang && noLic) return badge(esc(t('repo.noMeta')), 'border-border');
+    return (noLang ? badge(esc(t('filter.noLang'))) : langDot(r.lang)) + licenseBadge(r.license);
+  }
+
   // star 数据里没有评分，卡片右上角改显 star 数
   function repoCard(r) {
     return `
@@ -152,7 +160,7 @@
       </div>
       ${r.archived ? `<div>${badge(icon('archive', 'size-3') + esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300')}</div>` : ''}
       <div class="mt-auto flex flex-wrap items-center gap-1">
-        ${langDot(r.lang)}${licenseBadge(r.license)}${r.isFork ? badge(esc(t('repo.fork'))) : ''}
+        ${metaBadges(r)}${r.isFork ? badge(esc(t('repo.fork'))) : ''}
       </div>
       ${r.topics && r.topics.length ? `<div class="flex flex-wrap gap-1">${r.topics.slice(0, 3).map(x => badge('#' + esc(x))).join('')}${r.topics.length > 3 ? badge('+' + (r.topics.length - 3)) : ''}</div>` : ''}
       <div class="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
@@ -181,7 +189,7 @@
         <p class="truncate text-sm text-muted-foreground">${esc(r.desc || t('repo.noDesc'))}</p>
       </div>
       <div class="hidden shrink-0 items-center gap-3 md:flex">
-        ${langDot(r.lang)}${licenseBadge(r.license)}
+        ${metaBadges(r)}
         <span class="w-24 text-right text-xs text-muted-foreground">${esc(fmtAgo(r.pushedAgo))}</span>
       </div>
       <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(t('repo.visit'))}"
