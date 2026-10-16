@@ -64,7 +64,13 @@
   }
 
   // ---------- 状态 ----------
-  let L = localStorage.getItem('stars-lang') || 'zh-CN';
+  // 站点标题/副标题优先用 data.js 里的配置（别人通过 workflow_call 传入），
+  // 没有配置才回落到词典默认值 —— 这样使用者无需 fork 改代码即可定制。
+  const SITE = D.site || {};
+  const siteTitle = () => SITE.title || t('site.title');
+  const siteDesc = () => SITE.desc || t('site.desc');
+
+  let L = localStorage.getItem('stars-lang') || SITE.lang || 'zh-CN';
   if (!T[L]) L = 'zh-CN';
   let theme = localStorage.getItem('stars-theme') || 'system';
   const applyTheme = () => {
@@ -337,7 +343,7 @@
         <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[60] inline-flex h-8 items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">Skip to content</a>
         <div class="flex items-center gap-2 font-semibold tracking-tight">
           <svg class="size-5 text-brand" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 2.9 6.2 6.6.8-4.9 4.6 1.3 6.6L12 17.4l-5.9 3.3 1.3-6.6L2.5 9.5l6.6-.8z" fill="currentColor"/></svg>
-          <span class="text-[17px]">${esc(t('site.title'))}</span>
+          <span class="text-[17px]">${esc(siteTitle())}</span>
         </div>
 
         <div class="relative mx-2 hidden max-w-sm flex-1 sm:block lg:ml-6">
@@ -379,14 +385,14 @@
   const sel = 'h-8 cursor-pointer rounded-md border border-input bg-background px-2 text-sm dark:bg-input/30';
 
   function render() {
-    document.title = t('site.title');
+    document.title = siteTitle();
     document.getElementById('app').innerHTML = `
       ${header()}
       <main id="main" class="outline-none">
         <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
           <div class="mb-6">
-            <h1 class="text-2xl font-semibold tracking-tight">${esc(t('site.title'))}</h1>
-            <p class="mt-1 text-sm text-muted-foreground">${esc(t('site.desc'))}</p>
+            <h1 class="text-2xl font-semibold tracking-tight">${esc(siteTitle())}</h1>
+            <p class="mt-1 text-sm text-muted-foreground">${esc(siteDesc())}</p>
           </div>
 
           ${statBar()}

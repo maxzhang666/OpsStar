@@ -29,6 +29,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="组装静态站")
     ap.add_argument("--data", default="data/stars.json", help="抓取产物路径")
     ap.add_argument("--out", default="dist", help="输出目录")
+    ap.add_argument("--title", default="", help="站点标题（留空用默认）")
+    ap.add_argument("--desc", default="", help="站点副标题（留空用默认）")
+    ap.add_argument("--lang", default="", choices=["", "zh-CN", "en"], help="界面默认语言")
     args = ap.parse_args()
 
     if not os.path.exists(args.data):
@@ -42,6 +45,18 @@ def main() -> int:
     if not repos:
         print("❌ 数据里没有任何仓库，终止构建（避免发布空站）", file=sys.stderr)
         return 1
+
+    # 站点配置写进 data.js，前端优先读它 —— 这样别人调用时能改标题，
+    # 不必 fork 仓库去改 i18n.js 里的中文串。
+    if args.title or args.desc or args.lang:
+        site = dict(payload.get("site") or {})
+        if args.title:
+            site["title"] = args.title
+        if args.desc:
+            site["desc"] = args.desc
+        if args.lang:
+            site["lang"] = args.lang
+        payload["site"] = site
 
     out = os.path.abspath(args.out)
     os.makedirs(out, exist_ok=True)

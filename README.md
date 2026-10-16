@@ -2,7 +2,34 @@
 
 把 GitHub 上 star 过的仓库抓下来，生成一个可搜索、可筛选的静态列表站，部署到 GitHub Pages。
 
-由 GitHub Actions 定时跑，无需服务器、无数据库、无前端框架。
+无需服务器、无数据库、无前端框架。
+
+---
+
+## ⭐ 最快的方式：直接在你的 CI 里调用
+
+**不用 fork，也不用往仓库里拷脚本。** 在你的仓库建一个 `.github/workflows/stars.yml`：
+
+```yaml
+name: My Stars
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
+    permissions:
+      contents: write          # 必须有，否则推送 gh-pages 会失败
+    with:
+      actor: <你的 GitHub 用户名>
+```
+
+完事。站点会发布到**你自己仓库**的 `gh-pages` 分支。
+
+想自定义标题、传 token、以及踩坑提示，见 **[docs/how-to-use.md](docs/how-to-use.md)**。
 
 ---
 
@@ -10,11 +37,11 @@
 
 列表页为主：左侧筛选（语言 / 许可证 / 星标数 / 归档状态），中间网格或列表两种视图，支持搜索和四种排序。点仓库名或「访问仓库」跳回 GitHub。
 
-界面沿用了 `2026-10-15-software-community` 那份 Shelf 原型的设计语言（Tailwind v4 + shadcn neutral色板），但**字段全部换成了 GitHub 真实数据**：原型里的平台、价格、评分在 star数据里不存在，所以直接砍掉；渐变方块图标换成 owner 的真实头像 + 语言色点。
+界面沿用了 `2026-10-15-software-community` 那份 Shelf 原型的设计语言（Tailwind v4 + shadcn neutral 色板），但**字段全部换成了 GitHub 真实数据**：原型里的平台、价格、评分在 star 数据里不存在，所以直接砍掉；渐变方块图标换成 owner 的真实头像 + 语言色点。
 
 ---
 
-## 快速开始
+## 本地跑（改代码时用）
 
 ```bash
 # 1. 抓取（公开 star 无需凭据）
@@ -29,8 +56,7 @@ cd dist && python3 -m http.server 8000
 
 浏览器打开 `http://localhost:8000`。
 
-> 第 1 步不需要任何 GitHub 凭据。`data/stars.json` 和 `dist/` 都在 `.gitignore` 里，
-> 每次都由 workflow 重新生成。
+> `data/stars.json` 和 `dist/` 都在 `.gitignore` 里，每次都由 workflow 重新生成。
 
 ## 抓取 star
 
@@ -44,20 +70,18 @@ python3 scripts/fetch_stars.py --actor <你的用户名> --out data/stars.json
 
 ### 什么时候才需要 token
 
-只有这两种情况：
-
-1. 你的 star 超过 6000 个（匿名翻不完）
-2. 仓库在组织名下 —— 此时 `github.repository_owner` 是组织名，需要显式指定用户名
+只有一种情况：**你的 star 超过 6000 个**（匿名每小时只能翻约 6000 个）。
 
 ```bash
 export GITHUB_TOKEN=ghp_xxx        # 或 GH_TOKEN
-python3 scripts/fetch_stars.py --out data/stars.json
+python3 scripts/fetch_stars.py --actor <你的用户名> --out data/stars.json
 ```
 
 token 只需勾 `public_repo`（或 `read:user`）。
 
-> ⚠️ **不要用 Actions 内置的 `secrets.GITHUB_TOKEN`。** 它是 GitHub App 的 *installation token*，
-> 调 `/user/starred` 会返回 **403** —— integration token 无权访问用户级接口。
+> ⚠️ **不要用 Actions 内置的 `secrets.GITHUB_TOKEN` 抓 star。** 它是 GitHub App 的
+> *installation token*，调 `/user/starred` 会返回 **403** —— integration token 无权访问
+> 用户级接口。这也是可复用工作流默认走匿名 + `--actor` 的原因。
 > 这也是本项目 workflow 默认走匿名 + `--actor` 的原因。
 
 ### 常用参数
@@ -72,9 +96,9 @@ token 只需勾 `public_repo`（或 `read:user`）。
 
 ## 部署到 GitHub Pages
 
-**一次性设置：**
+推荐直接用上面的**可复用工作流**（不用 fork 本仓库）。以下是「fork 后自己维护」的路径：
 
-1. 把这个仓库推到你自己的 GitHub 仓库
+1. 把这个仓库 fork 到你的 GitHub 账号
 2. Settings → Pages → Source 选 **Deploy from a branch**，分支选 `gh-pages`、目录选 `/ (root)`
 3. 打开 Actions → **Sync stars** → Run workflow，手动跑一次来生成 `gh-pages` 分支
    （Pages 必须先有这个分支才能开始托管）
@@ -118,8 +142,9 @@ scripts/
     app.js                    筛选 / 搜索 / 排序 / 分页 / 渲染
     i18n.js                   中英文案
     app.css                   Tailwind 编译产物（勿手改）
-.github/workflows/sync.yml定时抓取 → 构建 → 推 gh-pages
-data/stars.json抓取产物（gitignore）
+.github/workflows/sync.yml    可复用工作流：schedule + 手动触发 + 供他人调用
+docs/how-to-use.md            调用方使用说明（复制粘贴模板）
+data/stars.json               抓取产物（gitignore）
 dist/                         构建产物（gitignore）
 ```
 
