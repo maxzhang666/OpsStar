@@ -1,0 +1,130 @@
+name: OpsStar
+description: 抓取 GitHub star，生成可搜索可筛选的静态列表站并发布到指定分支
+author: maxzhang666
+
+inputs:
+  actor:
+    description: '抓取哪个用户的 star（留空 = 仓库所有者）'
+    required: false
+  limit:
+    description: '最多抓取多少个（留空 = 全部）'
+    required: false
+  enrich:
+    description: '为前 N 个仓库额外抓语言分布'
+    required: false
+    default: '0'
+  title:
+    description: '站点标题'
+    required: false
+  desc:
+    description: '站点副标题'
+    required: false
+  lang:
+    description: '界面默认语言（zh-CN / en）'
+    required: false
+  branch:
+    description: '发布到哪个分支'
+    required: false
+    default: 'gh-pages'
+  star_token:
+    description: >-
+      可选 PAT（仅 public_repo）。star 超过 6000 个时才需要。
+      复合 action 拿不到 secrets 上下文，建议改用 env: GH_TOKEN 传入（会被自动掩码）。
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: 取出构建脚本
+      shell: bash
+      env:
+        OPSSTAR_REPO: maxzhang666/OpsStar
+        OPSSTAR_REF: ${{ vars.OPSSTAR_REF }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        # 复合 action 的文件由 runner 自动下载到 github.action_path，
+        # 通常无需再取一次；但若 action 目录里没有 scripts/（例如本地开发时），回退到下载。
+        if [ -f "$ACTION_PATH/scripts/fetch_stars.py" ]; then
+          SCRIPTS="$ACTION_PATH/scripts"
+          echo "✅ 使用随 action 分发的脚本：$SCRIPTS"
+        else
+          REF="${OPSSTAR_REF:-main}"
+          URL="https://codeload.github.com/${OPSSTAR_REPO}/tar.gz/${REF}"
+          curl -fsSL "$URL" -o "$ACTION_PATH/repo.tar.gz"
+          mkdir -p "$ACTION_PATH/repo"
+          tar -xzf "$ACTION_PATH/repo.tar.gz" -C "$ACTION_PATH/repo" --strip-components=1
+          SCRIPTS="$ACTION_PATH/repo/scripts"
+          test -f "$SCRIPTS/fetch_stars.py" || { echo "❌ 未取到 scripts/fetch_stars.py"; exit 1; }
+          echo "✅ 已取得 ${OPSSTAR_REPO}@${REF} 的 scripts/"
+        fi
+        # 每个 run 都是独立 shell，变量要经 GITHUB_ENV 传给后续 step
+        echo "SCRIPTS=$SCRIPTS" >> "$GITHUB_ENV"
+
+    - name: 抓取 star
+      shell: bash
+      env:
+        # ⭐ 不要用内置 secrets.GITHUB_TOKEN 抓 star：它是 GitHub App 的
+        # installation token，调 /user/starred 返回 403（integration 无权访问用户级接口）。
+        # 默认走匿名 + --actor，公开 star 完全够用。
+        IN_TOKEN: ${{ inputs.star_token }}
+        IN_ACTOR: ${{ inputs.actor }}
+        FALLBACK_ACTOR: ${{ github.repository_owner }}
+        IN_LIMIT: ${{ inputs.limit }}
+        IN_ENRICH: ${{ inputs.enrich }}
+      run: |
+        ACTOR="${IN_ACTOR:-$FALLBACK_ACTOR}"
+        # 优先用调用方通过 env: GH_TOKEN 传入的（会被掩码），其次才是 input
+        TOKEN="${IN_TOKEN:-${GH_TOKEN:-}}"
+        echo "抓取 @$ACTOR 的 star"
+
+        ARGS=(--out "$GITHUB_WORKSPACE/data/stars.json" --actor "$ACTOR")
+        [ -n "$IN_LIMIT" ] && ARGS+=(--limit "$IN_LIMIT")
+        case "${IN_ENRICH:-}" in ''|*[!0-9]*) ;; *) ARGS+=(--enrich "$IN_ENRICH") ;; esac
+        [ -n "$TOKEN" ] && export GITHUB_TOKEN="$TOKEN"
+
+        mkdir -p "$GITHUB_WORKSPACE/data"
+        python "$SCRIPTS/fetch_stars.py" "${ARGS[@]}"
+
+    - name: 构建静态站
+      shell: bash
+      env:
+        IN_TITLE: ${{ inputs.title }}
+        IN_DESC: ${{ inputs.desc }}
+        IN_LANG: ${{ inputs.lang }}
+      run: |
+        ARGS=(--data "$GITHUB_WORKSPACE/data/stars.json" --out "$GITHUB_WORKSPACE/dist")
+        [ -n "$IN_TITLE" ] && ARGS+=(--title "$IN_TITLE")
+        [ -n "$IN_DESC" ]  && ARGS+=(--desc "$IN_DESC")
+        [ -n "$IN_LANG" ]  && ARGS+=(--lang "$IN_LANG")
+        python "$SCRIPTS/build_site.py" "${ARGS[@]}"
+
+    - name: 发布到分支
+      shell: bash
+      env:
+        # 复合 action 用 github.token（secrets 上下文在复合 action 中不可用）
+        GH_PAGES_TOKEN: ${{ github.token }}
+        TARGET_REPO: ${{ github.repository }}
+        IN_BRANCH: ${{ inputs.branch }}
+      run: |
+        BRANCH="${IN_BRANCH:-gh-pages}"
+
+        if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
+          echo "❌ 非法分支名：$BRANCH"
+          echo "   分支名不能包含空格、~ ^ : ? * [ \\ 、连续点，也不能以 / 或 - 开头。"
+          exit 1
+        fi
+
+        cd "$GITHUB_WORKSPACE/dist"
+        git init -q
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add -A
+        git commit -q -m "chore: update stars ($(TZ=UTC date +%Y-%m-%d))"
+        git push -f \
+          "https://x-access-token:${GH_PAGES_TOKEN}@github.com/${TARGET_REPO}.git" \
+          "HEAD:refs/heads/${BRANCH}"
+        echo "✅ 已发布到 ${TARGET_REPO} 的 ${BRANCH} 分支"
+        echo "   记得确认 Settings → Pages → Source 的分支名与上面一致。"

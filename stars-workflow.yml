@@ -1,0 +1,23 @@
+name: Update Stars
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+# 复合 action 不能自行提权，写权限必须在这里给
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate star site
+        uses: maxzhang666/OpsStar@main
+        with:
+          actor: maxzhang666
+          title: Stars
+          desc: 我 star 过的 GitHub 仓库
+          lang: zh-CN
+          branch: gh-pages

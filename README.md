@@ -12,9 +12,33 @@
 
 ## 在你的仓库里使用
 
-本项目是一个 **可复用工作流**，别人调用它不需要 fork，也不需要往自己的仓库拷脚本。
+不需要 fork，也不需要往自己的仓库拷脚本。两种调用方式，按喜好选一个。
+
+### 方式一：复合 action（推荐，接近 `uses: owner/repo@ref` 的写法）
 
 新建 `.github/workflows/stars.yml`：
+
+```yaml
+name: My Stars
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: maxzhang666/OpsStar@main
+        with:
+          actor: <你的 GitHub 用户名>
+```
+
+### 方式二：可复用工作流
 
 ```yaml
 name: My Stars
@@ -33,9 +57,29 @@ jobs:
       actor: <你的 GitHub 用户名>
 ```
 
-工作流会抓取数据、构建站点，并推到你仓库的 `gh-pages` 分支。
+两种方式都会抓取数据、构建站点，并推到你仓库的 `gh-pages` 分支。
 
-`permissions` 必须保留——GitHub 不允许被调用的工作流自行提权，缺少这行会在推送时失败。
+### 两者差别
+
+| | 复合 action | 可复用工作流 |
+|---|---|---|
+| 写法 | `uses: owner/repo@ref` | `uses: owner/repo/.github/workflows/x.yml@ref` |
+| 调用层级 | step | job |
+| 需自己声明 | `runs-on`、`on:`（定时） | `on:`（定时） |
+| secret 传递 | 只能用 `env:` | 可用 `secrets:` 显式映射 |
+| 状态显示 | 每步单独显示 | 整个 job 一条 |
+
+复合 action 拿不到 `secrets` 上下文，因此需要 PAT 时请用 `env:` 传入：
+
+```yaml
+      - uses: maxzhang666/OpsStar@main
+        env:
+          GH_TOKEN: ${{ secrets.STAR_TOKEN }}
+```
+
+star 不超过 6000 个时不需要 token，你多半用不上这条。
+
+无论哪种方式，写权限都必须自己给——GitHub 不允许被调用的工作流自行提权。
 
 首次使用前，在仓库 **Settings → Pages → Source** 选择 *Deploy from a branch*（分支 `gh-pages`，目录 `/ (root)`），然后手动触发一次 workflow 生成该分支。
 

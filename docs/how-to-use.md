@@ -1,11 +1,47 @@
 # 在你自己的 CI 里调用这个 Star 书架
 
-这是 GitHub 的**可复用工作流**（reusable workflow，`workflow_call`），不是 composite action。
-区别在于：action 只能给你一个步骤，reusable workflow 给你**一整套流程**（抓取 → 构建 → 发布），
-所以你不用写任何脚本，只要一行 `uses:` 就能用上完整功能。
+本项目同时提供两种入口，功能完全相同，按喜好选一种：
+
+- **复合 action** —— 写法是 `uses: maxzhang666/OpsStar@main`，需要自己声明 `runs-on` 和 `on:`
+- **可复用工作流** —— 写法是 `uses: .../.github/workflows/sync.yml@main`，声明在 job 上
+
+两种都不需要 fork，也不需要往仓库里拷脚本。下面的示例以复合 action 为主。
+
+## 最小可用
 
 把这个文件复制到你的仓库：`.github/workflows/stars.yml`，改掉 `actor` 就行。
-**不需要 fork OpsStar，也不需要往仓库里拷任何脚本。**
+
+```yaml
+name: My Stars
+
+on:
+  schedule:
+    - cron: '17 3 * * *'        # 每天跑一次；不需要定时就删掉这段
+  workflow_dispatch:             # 保留就能在 Actions 页面手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: maxzhang666/OpsStar@main
+        with:
+          actor: <你的 GitHub 用户名>   # ← 唯一必填项
+```
+
+若想用可复用工作流，把 jobs 部分换成：
+
+```yaml
+jobs:
+  build:
+    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
+    permissions:
+      contents: write
+    with:
+      actor: <你的 GitHub 用户名>
+```
 
 ---
 
@@ -49,7 +85,19 @@ jobs:
 
 匿名请求每小时 60 次，约能翻 6000 个仓库。超过这个量级，去
 **Settings → Secrets and variables → Actions** 新建一个 secret（叫什么都行，这里用
-`STAR_TOKEN`），填一个只勾 `public_repo` 权限的 PAT，然后引用它：
+`STAR_TOKEN`），填一个只勾 `public_repo` 权限的 PAT。
+
+复合 action 拿不到 `secrets` 上下文，所以要用 `env:` 传（这样日志里仍会被掩码）：
+
+```yaml
+      - uses: maxzhang666/OpsStar@main
+        env:
+          GH_TOKEN: ${{ secrets.STAR_TOKEN }}
+        with:
+          actor: <你的 GitHub 用户名>
+```
+
+用可复用工作流则可以走 `secrets:`：
 
 ```yaml
 jobs:
