@@ -1,0 +1,14 @@
+{
+  "name": "opsstar-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Star 书架的静态站构建（Python 负责抓取，这里只管样式编译）",
+  "scripts": {
+    "css": "tailwindcss -i ./input.css -o ./src/app.css --minify",
+    "css:watch": "tailwindcss -i ./input.css -o ./src/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}

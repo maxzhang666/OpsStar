@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Star 书架</title>
+  <meta name="description" content="我 star 过的 GitHub 仓库">
+  <!-- 内联脚本先跑，避免暗色用户看到白闪 -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('stars-theme') || 'system';
+        document.documentElement.classList.toggle('dark',
+          t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="min-h-dvh antialiased">
+  <div id="app"></div>
+  <!-- data.js 由 fetch_stars.py 生成并随站点一起发布 -->
+  <script src="data.js"></script>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

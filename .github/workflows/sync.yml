@@ -1,0 +1,85 @@
+name: Sync stars
+
+# 定时抓取 star 并重新构建站点，推到 gh-pages 分支供 GitHub Pages 托管。
+on:
+  schedule:
+    # 每天 03:17 UTC（约北京时间 11:17）。刻意避开整点，减少和别人的任务撞车导致的延迟。
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: '最多抓取多少个 star（留空 = 全部）'
+        required: false
+        type: string
+      enrich:
+        description: '为前 N 个仓库额外抓语言分布（0 = 不抓）'
+        required: false
+        type: string
+        default: '0'
+
+# 推 gh-pages 需要写权限。
+permissions:
+  contents: write
+
+# 同一时间只跑一个，避免手动触发和定时任务互相覆盖。
+concurrency:
+  group: sync-stars
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 抓取 star
+        env:
+          # ⭐ 不要用内置 secrets.GITHUB_TOKEN：
+          # 它是 GitHub App 的 installation token，调 /user/starred 会返回 403
+          # （integration 无权访问用户级接口）。内置 token 只能读仓库内容，不能读 star。
+          #
+          # 默认走匿名 + --actor <你的用户名>，公开 star 完全够用，也不用配任何 secret。
+          # 只有下面两种情况才需要 PAT：
+          #   ① 要抓超过 6000 个（匿名每小时只能翻约 6000 个）
+          #   ② 仓库在组织名下，repository_owner 是组织名而非你的用户名
+          # 需要时在 Settings → Secrets → Actions 新建 PAT，勾 public_repo 即可。
+          GH_TOKEN: ${{ secrets.PAT }}
+          GITHUB_ACTOR: ${{ github.repository_owner }}
+        run: |
+          python scripts/fetch_stars.py \
+            --out data/stars.json \
+            --actor "${{ github.repository_owner }}" \
+            ${{ github.event_name == 'workflow_dispatch' && inputs.limit && format('--limit {0}', inputs.limit) || '' }} \
+            ${{ github.event_name == 'workflow_dispatch' && inputs.enrich && format('--enrich {0}', inputs.enrich) || '' }}
+
+      - name: 构建静态站
+        run: python scripts/build_site.py --data data/stars.json --out dist
+
+      - name: 推送到 gh-pages
+        env:
+          # 显式带上 token：checkout 步骤存下的凭据默认不带写权限
+          GH_PAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 在 dist/ 里单独 init 一个仓库推，不动主 checkout。
+          # 相比 `git checkout --orphan`：不会把源码目录（.github/scripts）一起带进 gh-pages，
+          # 而且天然是「每次只有一个提交」的历史形态。
+          cd dist
+          git init -q
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "chore: update stars ($(TZ=UTC date +%Y-%m-%d))"
+          git push -f \
+            "https://x-access-token:${GH_PAGES_TOKEN}@github.com/${{ github.repository }}.git" \
+            HEAD:gh-pages
+
+      - name: 上传构建产物（便于排查）
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: dist/
+          retention-days: 7

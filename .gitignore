@@ -1,0 +1,20 @@
+# 抓取产物与构建产物：都由 workflow 重新生成，不进版本库
+data/stars.json
+dist/
+dist-stress/
+
+# 本地截图 / 调试产物
+.shots/
+.playwright-cli/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node（只用 Tailwind 编译样式，产物 src/app.css 是入库的）
+node_modules/
+
+# 本地 agent 的工作笔记，不属于项目代码
+.workbuddy/
+
+.DS_Store
