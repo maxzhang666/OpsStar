@@ -178,3 +178,9 @@ Tailwind 只编译实际用到的 class，直接复用其他项目的编译产�
 | 语言筛选 | 88 ms |
 | 关键词搜索 | 31 ms |
 | 排序 | 121 ms |
+
+---
+
+## 参与开发
+
+改动请遵循 [CONTRIBUTING.md](CONTRIBUTING.md) 里的提交信息约定。
