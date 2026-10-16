@@ -39,6 +39,11 @@
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM7 21h10"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    issue: '<circle cx="12" cy="12" r="10"/><path d="M14.31 8 10 12.39 7.41 9.9"/>',
+    tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+    calendar: '<path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>',
+    dot: '<circle cx="12.1" cy="12.1" r="1"/>',
     github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
   };
   const icon = (n, cls) => `<svg class="${cls || 'size-4'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -96,7 +101,7 @@
   // ---------- 筛选状态 ----------
   const PAGE = 60;   // 首屏渲染 60 条，之后滚动触底每次再加一批
   const f = {
-    lang: 'all', lic: 'all', q: '', sort: 'stars',
+    lang: 'all', lic: 'all', q: '', sort: 'stars', topic: '',
     starsOnly: false, hideArchived: false, activeOnly: false,
     view: localStorage.getItem('stars-view') || 'grid', open: false,
     limit: PAGE,
@@ -108,6 +113,7 @@
     let list = D.repos.filter(r => {
       if (f.lang === '__none' ? !!r.lang : (f.lang !== 'all' && r.lang !== f.lang)) return false;
       if (f.lic === '__none' ? !!r.license : (f.lic !== 'all' && r.license !== f.lic)) return false;
+      if (f.topic && !(r.topics || []).includes(f.topic)) return false;
       if (f.starsOnly && r.stars < 1000) return false;
       if (f.hideArchived && r.archived) return false;
       if (f.activeOnly && (r.pushedAgo == null || r.pushedAgo > 365)) return false;
@@ -151,14 +157,18 @@
   // star 数据里没有评分，卡片右上角改显 star 数
   function repoCard(r) {
     return `
-    <article class="group flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground transition-colors hover:border-foreground/20">
+    <article role="button" tabindex="0" data-repo="${esc(r.fullName)}"
+      onclick="F.openDrawer('${esc(r.fullName)}')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();F.openDrawer('${esc(r.fullName)}')}"
+      aria-label="${esc(t('drawer.openLabel', { name: r.name }))}"
+      class="group flex min-w-0 cursor-pointer flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground transition-colors hover:border-foreground/20 focus-visible:outline-2 focus-visible:outline-offset-2">
       <div class="flex items-start gap-3">
         <img src="${esc(r.ownerAvatar)}" alt="" width="44" height="44" loading="lazy" decoding="async"
              class="size-11 shrink-0 rounded-[22%] bg-muted object-cover">
         <div class="min-w-0 flex-1">
           <div class="flex items-start justify-between gap-2">
             <h3 class="truncate font-semibold leading-tight">
-              <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" class="hover:underline underline-offset-4">${esc(r.name)}</a>
+              <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="hover:underline underline-offset-4">${esc(r.name)}</a>
             </h3>
             <span class="inline-flex shrink-0 items-center gap-1 text-xs font-medium tabular-nums text-muted-foreground">
               ${icon('star', 'size-3.5 fill-amber-400 text-amber-400')}${fmtNum(r.stars)}
@@ -177,7 +187,7 @@
         <span class="inline-flex items-center gap-1">${icon('clock', 'size-3')}${esc(fmtAgo(r.pushedAgo))}</span>
         <span class="inline-flex items-center gap-3">
           <span class="inline-flex items-center gap-1 tabular-nums">${icon('fork', 'size-3')}${fmtNum(r.forks)}</span>
-          <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 font-medium text-foreground/80 hover:underline">
+          <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 font-medium text-foreground/80 hover:underline">
             ${icon('external', 'size-3')}${esc(t('repo.visit'))}
           </a>
         </span>
@@ -322,6 +332,219 @@
     return head + body + tail;
   }
 
+  // ---------- 详情抽屉 ----------
+  // 数据全部来自已加载的 data.js，不发请求：Pages 是静态站，
+  // 浏览器调 GitHub API 既受CORS 限制也会消耗匿名配额。
+  let drawerRepo = null;
+  let lastFocus = null;
+
+  const byFullName = n => (D.repos || []).find(r => r.fullName === n);
+
+  function statCell(ic, label, value, title) {
+    return `<div class="flex items-center gap-2"${title ? ` title="${esc(title)}"` : ''}>
+      <span class="text-muted-foreground">${icon(ic, 'size-4')}</span>
+      <span class="min-w-0">
+        <span class="block text-sm font-medium tabular-nums leading-tight">${esc(value)}</span>
+        <span class="block text-[11px] text-muted-foreground">${esc(label)}</span>
+      </span>
+    </div>`;
+  }
+
+  function topicChip(x) {
+    return `<button type="button" onclick="F.topic('${esc(x)}')"
+      class="cursor-pointer rounded-md border bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground">#${esc(x)}</button>`;
+  }
+
+  // 语言分布：仅 --enrich 抓取时才有，按字节数画横条
+  function langBars(langs) {
+    const entries = Object.entries(langs || {}).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+      return `<p class="text-[11px] text-muted-foreground">${esc(t('drawer.noLangs'))}</p>`;
+    }
+    const total = entries.reduce((s, [, v]) => s + v, 0);
+    const shown = entries.slice(0, 8);
+    return `<div class="space-y-1.5">
+      ${shown.map(([k, v]) => {
+        const pct = total ? (v / total) * 100 : 0;
+        return `<div class="grid grid-cols-[minmax(0,5rem)_1fr_auto] items-center gap-2 text-xs">
+          <span class="flex min-w-0 items-center gap-1.5">
+            <span class="size-2 shrink-0 rounded-full" style="background:${esc(langColor(k))}"></span>
+            <span class="truncate">${esc(k)}</span>
+          </span>
+          <span class="h-1.5 overflow-hidden rounded-full bg-muted">
+            <span class="block h-full rounded-full" style="width:${pct.toFixed(1)}%;background:${esc(langColor(k))}"></span>
+          </span>
+          <span class="tabular-nums text-muted-foreground">${pct.toFixed(1)}%</span>
+        </div>`;
+      }).join('')}
+      ${entries.length > shown.length ? `<p class="pt-0.5 text-[11px] text-muted-foreground">${esc(t('drawer.moreLangs', { n: entries.length - shown.length }))}</p>` : ''}
+    </div>`;
+  }
+
+  function drawerHTML(r) {
+    const features = [
+      r.hasIssues ? t('drawer.hasIssues') : null,
+      r.hasWiki ? t('drawer.hasWiki') : null,
+      r.hasDiscussions ? t('drawer.hasDiscussions') : null,
+      r.hasPages ? t('drawer.hasPages') : null,
+    ].filter(Boolean);
+
+    return `
+    <div class="drawer-overlay fixed inset-0 z-50 bg-black/40" onclick="F.closeDrawer(event)"></div>
+    <aside class="drawer-panel fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l bg-background shadow-xl"
+           role="dialog" aria-modal="true" aria-labelledby="drawerTitle" tabindex="-1" id="drawer">
+
+      <header class="flex items-start gap-3 border-b px-5 py-4">
+        <img src="${esc(r.ownerAvatar)}" alt="" width="40" height="40" decoding="async"
+             class="size-10 shrink-0 rounded-[22%] bg-muted object-cover">
+        <div class="min-w-0 flex-1">
+          <h2 id="drawerTitle" class="truncate font-semibold leading-tight">
+            <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" class="hover:underline underline-offset-4">${esc(r.name)}</a>
+          </h2>
+          <p class="mt-0.5 truncate text-xs text-muted-foreground">
+            <a href="https://github.com/${esc(r.owner)}" target="_blank" rel="noopener noreferrer" class="hover:underline">${esc(r.owner)}</a>
+          </p>
+        </div>
+        <button type="button" onclick="F.closeDrawer()" aria-label="${esc(t('drawer.close'))}"
+                class="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          ${icon('x', 'size-4')}
+        </button>
+      </header>
+
+      <div class="scroll-slim flex-1 overflow-y-auto px-5 py-4">
+        ${r.desc
+          ? `<p class="text-sm leading-relaxed">${esc(r.desc)}</p>`
+          : `<p class="text-sm italic text-muted-foreground">${esc(t('repo.noDesc'))}</p>`}
+
+        <div class="mt-3 flex flex-wrap gap-1">${metaBadges(r)}${r.isFork ? badge(esc(t('repo.fork'))) : ''}${r.archived ? badge(icon('archive', 'size-3') + esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300') : ''}</div>
+
+        ${r.homepage ? `<a href="${esc(r.homepage)}" target="_blank" rel="noopener noreferrer"
+            class="mt-3 flex items-center gap-1.5 truncate text-xs text-brand hover:underline underline-offset-4">
+            ${icon('globe', 'size-3.5 shrink-0')}<span class="truncate">${esc(r.homepage.replace(/^https?:\/\//, ''))}</span>
+          </a>` : ''}
+
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          ${statCell('star', t('drawer.stars'), fmtNum(r.stars))}
+          ${statCell('fork', t('drawer.forks'), fmtNum(r.forks))}
+          ${r.openIssues != null ? statCell('issue', t('drawer.issues'), fmtNum(r.openIssues)) : ''}
+          ${statCell('archive', t('drawer.size'), fmtBytes(r.size))}
+        </div>
+
+        <section class="mt-6">
+          <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.timeline'))}</h3>
+          <dl class="space-y-1.5 text-xs">
+            ${[
+              ['drawer.starredAt', r.starredAgo],
+              ['drawer.pushedAt', r.pushedAgo],
+              ['drawer.createdAt', r.createdAgo],
+            ].filter(([, d]) => d != null).map(([k, d]) => `
+              <div class="flex items-center gap-2">
+                <span class="text-muted-foreground">${icon('clock', 'size-3.5')}</span>
+                <dt class="text-muted-foreground">${esc(t(k))}</dt>
+                <dd class="ml-auto tabular-nums">${esc(fmtAgo(d))}</dd>
+              </div>`).join('')}
+          </dl>
+        </section>
+
+        <section class="mt-6">
+          <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.languages'))}</h3>
+          ${langBars(r.langs)}
+        </section>
+
+        ${r.topics && r.topics.length ? `
+        <section class="mt-6">
+          <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.topics'))}</h3>
+          <div class="flex flex-wrap gap-1">${r.topics.map(topicChip).join('')}</div>
+        </section>` : ''}
+
+        ${features.length ? `
+        <section class="mt-6">
+          <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.features'))}</h3>
+          <div class="flex flex-wrap gap-1">${features.map(x => badge(esc(x))).join('')}</div>
+        </section>` : ''}
+      </div>
+
+      <footer class="flex gap-2 border-t px-5 py-3">
+        <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90">
+          ${icon('github', 'size-4')}${esc(t('repo.visit'))}
+        </a>
+        <a href="${esc(r.url)}/stargazers" target="_blank" rel="noopener noreferrer"
+           class="inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+          ${icon('star', 'size-4')}${esc(t('drawer.stargazers'))}
+        </a>
+      </footer>
+    </aside>`;
+  }
+
+  function fmtBytes(n) {
+    if (n == null) return '—';
+    if (n < 1024) return n + ' B';
+    const units = ['KB', 'MB', 'GB'];
+    let v = n / 1024, i = 0;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + ' ' + units[i];
+  }
+
+  function openDrawer(fullName) {
+    const r = byFullName(fullName);
+    if (!r) return;
+    drawerRepo = r;
+    // 鼠标点击不会把焦点落到 article 上（activeElement 会是 body），
+    // 所以显式记录触发它的卡片，关闭时还回去。
+    const active = document.activeElement;
+    lastFocus = (active && active !== document.body && document.contains(active))
+      ? active
+      : document.querySelector(`article[data-repo="${CSS.escape(fullName)}"]`);
+
+    const host = document.getElementById('drawerHost');
+    host.innerHTML = drawerHTML(r);
+    host.classList.remove('hidden');
+    document.body.classList.add('drawer-open');
+    document.body.style.paddingRight = (window.innerWidth - document.documentElement.clientWidth) + 'px';
+    // 常驻底栏在抽屉下方会与抽屉底部的操作按钮打架，直接藏掉
+    const bf = document.querySelector('footer');
+    if (bf) bf.style.display = 'none';
+
+    const panel = document.getElementById('drawer');
+    if (panel) panel.focus();
+
+    if (!location.hash.startsWith('#r=')) {
+      history.replaceState(null, '', '#r=' + encodeURIComponent(fullName));
+    }
+  }
+
+  function closeDrawer() {
+    if (!drawerRepo) return;
+    drawerRepo = null;
+    const host = document.getElementById('drawerHost');
+    if (host) { host.innerHTML = ''; host.classList.add('hidden'); }
+    document.body.classList.remove('drawer-open');
+    document.body.style.paddingRight = '';
+    const bf = document.querySelector('footer');
+    if (bf) bf.style.display = '';
+    if (location.hash.startsWith('#r=')) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+    // 焦点还回触发它的卡片
+    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+    lastFocus = null;
+  }
+
+  // 抽屉内 Tab 循环，避免焦点跑到背景内容上
+  document.addEventListener('keydown', e => {
+    if (!drawerRepo) return;
+    if (e.key === 'Escape') { closeDrawer(); return; }
+    if (e.key !== 'Tab') return;
+    const panel = document.getElementById('drawer');
+    if (!panel) return;
+    const items = [...panel.querySelectorAll('a[href], button:not([disabled])')].filter(el => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
   // ---------- 语言 / 主题 / 视图切换 ----------
   // 任何改变结果集的操作都要把 limit 收回第一页，否则筛选后仍按上次的偏移量截断
   window.F = {
@@ -333,6 +556,9 @@
     setTheme(th) { theme = th; localStorage.setItem('stars-theme', th); applyTheme(); render(); },
     setView(v) { f.view = v; f.limit = PAGE; localStorage.setItem('stars-view', v); render(); },
     more() { loadMore(); },
+    openDrawer(name) { openDrawer(name); },
+    closeDrawer() { closeDrawer(); },
+    topic(x) { f.q = ''; f.topic = x; f.limit = PAGE; render(); closeDrawer(); },
   };
 
   // ---------- 下拉菜单（主题切换） ----------
@@ -539,7 +765,8 @@
 
         </div>
       </main>
-      ${bottomBar()}`;
+      ${bottomBar()}
+      <div id="drawerHost" class="hidden"></div>`;
     observeTail();
     closeMenus();
   }
@@ -590,4 +817,18 @@
   });
 
   render();
+
+  // 支持直接分享 #r=owner/name 链接；浏览器前进后退时同步开关抽屉
+  function syncFromHash() {
+    const m = location.hash.match(/^#r=(.+)$/);
+    if (m) {
+      const name = decodeURIComponent(m[1]);
+      if (byFullName(name)) openDrawer(name);
+      else closeDrawer();
+    } else if (drawerRepo) {
+      closeDrawer();
+    }
+  }
+  window.addEventListener('hashchange', syncFromHash);
+  syncFromHash();
 })();

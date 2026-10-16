@@ -98,11 +98,33 @@
   /* 滚动加载时的骨架条 */
   .skeleton { @apply rounded-md bg-muted animate-pulse; }
 
+  /* 详情抽屉：遮罩淡入 + 面板从右滑入 */
+  .drawer-overlay {
+    animation: drawer-fade .18s ease-out;
+  }
+  .drawer-panel {
+    animation: drawer-slide .22s cubic-bezier(.32, .72, 0, 1);
+  }
+  @keyframes drawer-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes drawer-slide {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+
   /* 侧栏滚动条收窄，避免筛选列表出现一条抢眼的宽滚动条 */
   .scroll-slim { scrollbar-width: thin; }
   .scroll-slim::-webkit-scrollbar { width: 6px; }
   .scroll-slim::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   .scroll-slim::-webkit-scrollbar-track { background: transparent; }
+}
+
+/* 抽屉打开时锁住背景滚动，并禁止移动端背景跟着橡皮筋晃 */
+body.drawer-open {
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 @media (prefers-reduced-motion: reduce) {
