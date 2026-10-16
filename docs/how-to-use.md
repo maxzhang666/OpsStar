@@ -73,16 +73,45 @@ jobs:
 | `title` | 站点标题 | `Star 书架` |
 | `desc` | 站点副标题 | `我 star 过的 GitHub 仓库` |
 | `lang` | 界面默认语言 | `zh-CN` |
+| `branch` | 站点发布到哪个分支 | `gh-pages` |
 
 > 这些是 OpsStar 脚本的命令行参数。别人调用时通过 `with:` 传同名参数，
 > 由工作流负责翻译 —— 你不需要知道命令行怎么写。
 
 ---
 
+## 换发布分支
+
+默认发布到 `gh-pages`。如果你已经在用别的分支（比如 `docs/`），或者不想让站点占用
+`gh-pages` 这个名字，可以改：
+
+```yaml
+jobs:
+  build:
+    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
+    permissions:
+      contents: write
+    with:
+      actor: <你的 GitHub 用户名>
+      branch: site-output
+```
+
+改完之后有一步别忘了：**仓库 Settings → Pages → Source 的分支名要改成同一个**，
+否则 workflow 推上去了但 Pages 不会更新。
+
+几点说明：
+
+- 分支名会被 `git check-ref-format` 校验，含空格或 `-` 开头的名字会被直接拒绝并给出提示。
+- 可以带斜杠（`pages/site`），但 git 的 ref 是文件式的：**`pages` 和 `pages/site` 不能共存**。
+  如果要嵌套名，就别再单独建同名的父分支。
+- 每次推送是强推（`--force`）到该分支且只保留一个提交，不会在你的仓库里堆历史。
+
+---
+
 ## ⚠️ 两个必须知道的点
 
 **1. 你的工作流必须自己给写权限。** GitHub 不允许被调用的工作流提权，所以调用方
-不给 `contents: write`，推送 `gh-pages` 就会失败。带 `schedule` 定时任务时尤其要注意：
+不给 `contents: write`，推送发布分支就会失败。带 `schedule` 定时任务时尤其要注意：
 
 ```yaml
 jobs:

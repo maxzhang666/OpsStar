@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: '0'
+      branch:
+        description: '发布到哪个分支（需与 Pages 的 Source 分支一致）'
+        required: false
+        type: string
+        default: 'gh-pages'
 
   workflow_call:
     inputs:
@@ -72,6 +77,11 @@ on:
         description: '界面默认语言'
         required: false
         type: string
+      branch:
+        description: '发布到哪个分支。改了它，仓库 Settings → Pages 的 Source 分支也要改成同一个名字'
+        required: false
+        type: string
+        default: 'gh-pages'
     secrets:
       star_token:
         description: '可选 PAT（仅 public_repo 权限）。star 超过 6000 个时才需要。'
@@ -161,7 +171,7 @@ jobs:
           [ -n "$IN_LANG" ]  && ARGS+=(--lang "$IN_LANG")
           python repo/scripts/build_site.py "${ARGS[@]}"
 
-      - name: 推送到 gh-pages
+      - name: 发布到分支
         env:
           # 推分支要用调用方仓库的 token。
           # 被调用时 secrets.GITHUB_TOKEN 仍是「本仓库」（即 OpsStar）的凭据，
@@ -169,9 +179,21 @@ jobs:
           # 正好是我们想要的：站点发布到使用者的仓库上。
           GH_PAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_REPO: ${{ github.repository }}
+          IN_BRANCH: ${{ inputs.branch }}
         run: |
+          # schedule 触发时 inputs 不存在，所以这里做兜底而不是在 YAML 里内插
+          BRANCH="${IN_BRANCH:-gh-pages}"
+
+          # git check-ref-format 能挡掉非法分支名（空格、连续点、以 - 开头等）。
+          # 不校验的话，坏名字会在 git push 才报错，且报错信息很难看懂。
+          if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
+            echo "❌ 非法分支名：$BRANCH"
+            echo "   分支名不能包含空格、~ ^ : ? * [ \ 、连续点，也不能以 / 或 - 开头。"
+            exit 1
+          fi
+
           # 在 dist/ 里单独 init 一个仓库推，不动主 checkout。
-          # 相比 `git checkout --orphan`：不会把源码目录带进 gh-pages，
+          # 相比 `git checkout --orphan`：不会把源码目录带进产物分支，
           # 而且天然是「每次只有一个提交」的历史形态。
           cd dist
           git init -q
@@ -179,10 +201,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "chore: update stars ($(TZ=UTC date +%Y-%m-%d))"
+
+          # 显式写 refs/heads/ 前缀，避免省略前缀时 git 对「像路径的名字」产生歧义。
+          # 注意 git 的 ref 命名空间是文件式的：pages 和 pages/site 不能同时存在，
+          # 想用嵌套分支名就别再单独建同名的父分支。
           git push -f \
             "https://x-access-token:${GH_PAGES_TOKEN}@github.com/${TARGET_REPO}.git" \
-            HEAD:gh-pages
-          echo "✅ 已推送 ${TARGET_REPO} 的 gh-pages 分支"
+            "HEAD:refs/heads/${BRANCH}"
+          echo "✅ 已发布到 ${TARGET_REPO} 的 ${BRANCH} 分支"
+          echo "   记得确认 Settings → Pages → Source 的分支名与上面一致，否则站点不会更新。"
 
       - name: 上传构建产物（便于排查）
         uses: actions/upload-artifact@v4

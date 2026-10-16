@@ -39,6 +39,8 @@ jobs:
 
 首次使用前，在仓库 **Settings → Pages → Source** 选择 *Deploy from a branch*（分支 `gh-pages`，目录 `/ (root)`），然后手动触发一次 workflow 生成该分支。
 
+如果通过 `branch` 指定了其他分支名，Pages 的 Source 分支需改成同一个名字，否则站点不会更新。
+
 完整的参数说明、token 配置和故障排查见 [docs/how-to-use.md](docs/how-to-use.md)。
 
 ## 可配置项
@@ -51,6 +53,7 @@ jobs:
 | `lang` | 界面默认语言（`zh-CN` / `en`） | `zh-CN` |
 | `limit` | 最多抓取多少个 | 全部 |
 | `enrich` | 为前 N 个仓库额外抓取语言分布 | `0`（不抓） |
+| `branch` | 站点发布到哪个分支 | `gh-pages` |
 | `star_token` | PAT，仅在 star 超过 6000 个时需要 | 无 |
 
 配置项会写入 `data.js`，调用方无需修改任何源码即可定制站点。
