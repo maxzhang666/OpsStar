@@ -94,7 +94,7 @@
   };
 
   // ---------- 筛选状态 ----------
-  const PAGE = 60;   // 首屏渲染 60 张，之后点「加载更多」每次再加一页
+  const PAGE = 60;   // 首屏渲染 60 条，之后滚动触底每次再加一批
   const f = {
     lang: 'all', lic: 'all', q: '', sort: 'stars',
     starsOnly: false, hideArchived: false, activeOnly: false,
