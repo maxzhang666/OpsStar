@@ -22,11 +22,10 @@ window.I18N = {
 
     'view.grid': '网格视图', 'view.list': '列表视图',
 
-    'action.loadMore': '再加载 {n} 个',
-
     'state.count': '{n} 个仓库',
     'state.countFiltered': '{n} / {total} 个仓库',
-    'state.shownOf': '已显示 {shown} / {total}',
+    'state.shownOf': '已显示 {shown} / {total}，继续下滑加载',
+    'state.allLoaded': '已全部加载：共 {n} 个仓库',
     'state.empty': '没有匹配的仓库',
     'state.emptyDesc': '换个关键词，或清空筛选条件。',
     'state.error': '数据加载失败',
@@ -75,11 +74,10 @@ window.I18N = {
 
     'view.grid': 'Grid view', 'view.list': 'List view',
 
-    'action.loadMore': 'Load {n} more',
-
     'state.count': '{n} repositories',
     'state.countFiltered': '{n} of {total} repositories',
-    'state.shownOf': 'Showing {shown} of {total}',
+    'state.shownOf': 'Showing {shown} of {total}, keep scrolling',
+    'state.allLoaded': 'All loaded: {n} repositories',
     'state.empty': 'No matching repositories',
     'state.emptyDesc': 'Try another keyword, or clear the filters.',
     'state.error': 'Failed to load data',

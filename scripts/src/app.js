@@ -39,6 +39,7 @@
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM7 21h10"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
   };
   const icon = (n, cls) => `<svg class="${cls || 'size-4'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 
@@ -67,6 +68,9 @@
   // 站点标题/副标题优先用 data.js 里的配置（别人通过 workflow_call 传入），
   // 没有配置才回落到词典默认值 —— 这样使用者无需 fork 改代码即可定制。
   const SITE = D.site || {};
+  // 底栏版权链接指向本项目仓库
+  const OWNER = 'maxzhang666';
+  const REPO = 'OpsStar';
   const siteTitle = () => SITE.title || t('site.title');
   const siteDesc = () => SITE.desc || t('site.desc');
 
@@ -147,7 +151,7 @@
   // star 数据里没有评分，卡片右上角改显 star 数
   function repoCard(r) {
     return `
-    <article class="group flex flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground transition-colors hover:border-foreground/20">
+    <article class="group flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground transition-colors hover:border-foreground/20">
       <div class="flex items-start gap-3">
         <img src="${esc(r.ownerAvatar)}" alt="" width="44" height="44" loading="lazy" decoding="async"
              class="size-11 shrink-0 rounded-[22%] bg-muted object-cover">
@@ -296,25 +300,26 @@
       ? esc(t('state.countFiltered', { n: fmtNum(list.length), total: fmtFull(D.repos.length) }))
       : esc(t('state.count', { n: fmtFull(list.length) }))}</p>`;
 
-    // 只渲染前 f.limit 条，剩下的靠「加载更多」按需追加
+    // 只渲染前 f.limit 条；滚到底由 IntersectionObserver 触发 F.more() 追加
     const shown = list.slice(0, f.limit);
     const rest = list.length - shown.length;
 
-    const more = rest > 0
-      ? `<div class="mt-6 flex flex-col items-center gap-2">
-           <button type="button" onclick="F.more()"
-             class="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-accent">
-             ${icon('refresh', 'size-3.5')}${esc(t('action.loadMore', { n: fmtNum(Math.min(PAGE, rest)) }))}
-           </button>
-           <span class="text-xs text-muted-foreground">${esc(t('state.shownOf', { shown: fmtFull(shown.length), total: fmtFull(list.length) }))}</span>
-         </div>`
-      : '';
-
     const body = f.view === 'list'
-      ? `<div class="divide-y rounded-xl border bg-card px-4">${shown.map(repoRow).join('')}</div>`
-      : `<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">${shown.map(repoCard).join('')}</div>`;
+      ? `<div id="repoList" class="divide-y rounded-xl border bg-card px-4">${shown.map(repoRow).join('')}</div>`
+      // 必须显式写 grid-cols-1：否则移动端只有隐式 auto 轨道，
+      // 卡片内容把 min-width:auto 顶到 458px，撑破 358px 的容器造成横向溢出。
+      // grid-cols-1 = repeat(1, minmax(0,1fr))，minmax 的 0 正好堵住这个坑。
+      : `<div id="repoList" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">${shown.map(repoCard).join('')}</div>`;
 
-    return head + body + more;
+    // 哨兵：进入视口就加载下一批；全部加载完显示结束提示
+    const tail = rest > 0
+      ? `<div id="scrollTail" class="mt-6 flex flex-col items-center gap-2" aria-hidden="true">
+           <span class="skeleton h-4 w-28"></span>
+           <span data-shown-of class="text-xs text-muted-foreground">${esc(t('state.shownOf', { shown: fmtFull(shown.length), total: fmtFull(list.length) }))}</span>
+         </div>`
+      : `<p class="mt-6 text-center text-xs text-muted-foreground">${esc(t('state.allLoaded', { n: fmtFull(list.length) }))}</p>`;
+
+    return head + body + tail;
   }
 
   // ---------- 语言 / 主题 / 视图切换 ----------
@@ -327,15 +332,122 @@
     setLang(l) { L = l; localStorage.setItem('stars-lang', l); render(); },
     setTheme(th) { theme = th; localStorage.setItem('stars-theme', th); applyTheme(); render(); },
     setView(v) { f.view = v; f.limit = PAGE; localStorage.setItem('stars-view', v); render(); },
-    more() { f.limit += PAGE; render(); },
+    more() { loadMore(); },
   };
+
+  // ---------- 下拉菜单（主题切换） ----------
+  // 事件委托：菜单面板是重渲染出来的，直接绑定会在每次 render 后失效
+  function closeMenus() {
+    document.querySelectorAll('[data-menu-panel]').forEach(p => { p.hidden = true; });
+    document.querySelectorAll('[data-menu-trigger]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  }
+
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('[data-menu-trigger]');
+    if (trigger) {
+      const panel = trigger.parentElement.querySelector('[data-menu-panel]');
+      if (panel) {
+        const willOpen = panel.hidden;
+        closeMenus();
+        panel.hidden = !willOpen;
+        trigger.setAttribute('aria-expanded', String(willOpen));
+      }
+      return;
+    }
+    const item = e.target.closest('[data-set-theme]');
+    if (item) {
+      F.setTheme(item.getAttribute('data-set-theme'));
+      return;
+    }
+    // 点在菜单外面 → 收起
+    if (!e.target.closest('[data-menu]')) closeMenus();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeMenus();
+  });
+
+  // ---------- 滚动自动加载 ----------
+  // 只往 #repoList 尾部追加新节点，而不是整页重渲染：
+  // 后者每次都要重建已渲染的几百个卡片，滚动时会明显卡顿，也会丢失滚动位置。
+  let loadingMore = false;
+
+  function loadMore() {
+    if (loadingMore) return;
+    const list = matches();
+    if (f.limit >= list.length) return;
+
+    loadingMore = true;
+    const host = document.getElementById('repoList');
+    if (!host) { loadingMore = false; return; }
+
+    const from = f.limit;
+    f.limit = Math.min(f.limit + PAGE, list.length);
+    const next = list.slice(from, f.limit);
+    host.insertAdjacentHTML('beforeend', next.map(f.view === 'list' ? repoRow : repoCard).join(''));
+
+    updateTail(list);
+    // 等 DOM 布局稳定后再放开，防止连续滚动瞬间把 1222 条全塞进来
+    requestAnimationFrame(() => { loadingMore = false; });
+  }
+
+  function updateTail(list) {
+    const results = document.getElementById('results');
+    if (!results) return;
+    const rest = list.length - f.limit;
+    const shownOf = results.querySelector('[data-shown-of]');
+    if (rest > 0) {
+      // 原地更新文本即可；不要 insert 新节点，否则计数行会越堆越多
+      if (shownOf) shownOf.textContent = t('state.shownOf', { shown: fmtFull(f.limit), total: fmtFull(list.length) });
+    } else {
+      const tail = results.querySelector('#scrollTail');
+      if (tail) {
+        tail.removeAttribute('aria-hidden');
+        tail.innerHTML = `<p class="text-xs text-muted-foreground">${esc(t('state.allLoaded', { n: fmtFull(list.length) }))}</p>`;
+      }
+    }
+  }
+
+  let observer = null;
+  function observeTail() {
+    if (observer) observer.disconnect();
+    const tail = document.getElementById('scrollTail');
+    if (!tail) return;
+    observer = new IntersectionObserver(entries => {
+      if (entries.some(en => en.isIntersecting)) loadMore();
+    }, { rootMargin: '400px 0px' });   // 提前 400px 预加载，滚起来才不觉得卡
+    observer.observe(tail);
+  }
 
   function themeIcon() { return { light: 'sun', dark: 'moon', system: 'monitor' }[theme]; }
 
+  const iconBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer';
+
+  // 主题下拉菜单：照原型用 menuitemradio + 勾选标记，
+  // 而不是「点一下循环切换」——后者看不出当前处于哪种模式。
+  function themeMenu() {
+    const item = 'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground';
+    return `
+    <div class="relative" data-menu="theme">
+      <button type="button" data-menu-trigger aria-haspopup="menu" aria-expanded="false"
+              aria-label="${esc(t('nav.theme'))}" title="${esc(t('theme.' + theme))}" class="${iconBtn}">
+        ${icon(themeIcon(), 'size-4')}
+      </button>
+      <div data-menu-panel role="menu" hidden
+           class="absolute right-0 top-full z-50 mt-2 w-40 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+        ${['light', 'dark', 'system'].map(k => `
+          <button role="menuitemradio" aria-checked="${theme === k}" data-set-theme="${k}" class="${item}">
+            ${icon({ light: 'sun', dark: 'moon', system: 'monitor' }[k], 'size-4')}
+            <span class="flex-1">${esc(t('theme.' + k))}</span>
+            ${theme === k ? `<span class="text-brand">${icon('check', 'size-4')}</span>` : ''}
+          </button>`).join('')}
+      </div>
+    </div>`;
+  }
+
   function header() {
-    const btn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer';
     const menuBtn = (act, label, active, content) =>
-      `<button type="button" onclick="${act}" aria-label="${esc(label)}" title="${esc(label)}" class="${btn} ${active ? 'bg-accent text-foreground' : ''}">${content}</button>`;
+      `<button type="button" onclick="${act}" aria-label="${esc(label)}" title="${esc(label)}" class="${iconBtn} ${active ? 'bg-accent text-foreground' : ''}">${content}</button>`;
 
     return `
     <header class="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md">
@@ -348,7 +460,7 @@
 
         <div class="relative mx-2 hidden max-w-sm flex-1 sm:block lg:ml-6">
           <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">${icon('search', 'size-4')}</span>
-          <input type="search" value="${esc(f.q)}" oninput="F.set('q',this.value)" placeholder="${esc(t('filter.search'))}"
+          <input type="search" data-search="header" value="${esc(f.q)}" oninput="F.set('q',this.value)" placeholder="${esc(t('filter.search'))}"
                  aria-label="${esc(t('filter.search'))}"
                  class="flex h-9 w-full rounded-md border border-input bg-muted/50 py-1 pl-8 pr-3 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30">
         </div>
@@ -358,8 +470,7 @@
             ${menuBtn("F.setLang('zh-CN')", '简体中文', L === 'zh-CN', `<span class="text-xs font-medium">中</span>`)}
             ${menuBtn("F.setLang('en')", 'English', L === 'en', `<span class="text-xs font-medium">EN</span>`)}
           </div>
-          <button type="button" onclick="F.setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')" class="${btn}"
-                  aria-label="${esc(t('nav.theme'))}" title="${esc(t('theme.' + theme))}">${icon(themeIcon(), 'size-4')}</button>
+          ${themeMenu()}
         </div>
       </div>
     </header>`;
@@ -403,7 +514,7 @@
               <div class="mb-3 flex flex-wrap items-center gap-2">
                 <div class="relative min-w-48 flex-1">
                   <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">${icon('search', 'size-4')}</span>
-                  <input type="search" value="${esc(f.q)}" oninput="F.set('q',this.value)" placeholder="${esc(t('filter.search'))}"
+                  <input type="search" data-search="inline" value="${esc(f.q)}" oninput="F.set('q',this.value)" placeholder="${esc(t('filter.search'))}"
                          aria-label="${esc(t('filter.search'))}"
                          class="flex h-8 w-full rounded-md border border-input bg-transparent py-1 pl-8 pr-3 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30">
                 </div>
@@ -426,13 +537,30 @@
             </div>
           </div>
 
-          <footer class="mt-16 border-t pt-6 text-sm text-muted-foreground">
-            <p class="font-medium text-foreground/80">${esc(t('about.title'))}</p>
-            <p class="mt-1 max-w-2xl">${esc(t('about.desc'))}</p>
-            <p class="mt-2 text-xs">${esc(t('generated', { t: new Date(D.generatedAt || Date.now()).toLocaleString(L === 'en' ? 'en-US' : 'zh-CN', { dateStyle: 'medium', timeStyle: 'short' }) }))}</p>
-          </footer>
         </div>
-      </main>`;
+      </main>
+      ${bottomBar()}`;
+    observeTail();
+    closeMenus();
+  }
+
+  // 常驻底栏：fixed 在视口底部，滚动时始终可见。
+  // 用 fixed 会遮住内容尾部，所以给 body 加 pb 预留出它的高度。
+  function bottomBar() {
+    const year = new Date().getFullYear();
+    const genTime = new Date(D.generatedAt || Date.now())
+      .toLocaleString(L === 'en' ? 'en-US' : 'zh-CN', { dateStyle: 'medium', timeStyle: 'short' });
+    return `
+    <footer class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/85 backdrop-blur-md">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-muted-foreground sm:px-6">
+        <span>&copy; ${year} ${esc(siteTitle())}</span>
+        <span class="hidden sm:inline">${esc(t('generated', { t: genTime }))}</span>
+        <a href="https://github.com/${OWNER}/${REPO}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-1 hover:text-foreground hover:underline underline-offset-4">
+          ${icon('github', 'size-3.5')}<span>${esc(OWNER)}/${esc(REPO)}</span>
+        </a>
+      </div>
+    </footer>`;
   }
 
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (theme === 'system') applyTheme(); });
@@ -450,9 +578,10 @@
       f.q = value;
       f.limit = PAGE;
       render();
-      // header 和结果区各有一个搜索框，要回到用户正在用的那一个
-      const boxes = [...document.querySelectorAll('input[type=search]')];
-      const target = boxes.find(b => b.placeholder === el.placeholder) || boxes[0];
+      // header 和结果区各有一个搜索框，且 placeholder 完全相同，
+      // 只能靠 data-search 这个稳定标识回到用户正在用的那一个
+      const key = el.getAttribute('data-search');
+      const target = document.querySelector(`input[type=search][data-search="${key}"]`);
       if (target) {
         target.focus();
         try { target.setSelectionRange(caret, caret); } catch (err) { /* search 类型可能不支持，忽略 */ }

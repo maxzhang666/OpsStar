@@ -95,6 +95,9 @@
 @layer components {
   .tnum { font-variant-numeric: tabular-nums; }
 
+  /* 滚动加载时的骨架条 */
+  .skeleton { @apply rounded-md bg-muted animate-pulse; }
+
   /* 侧栏滚动条收窄，避免筛选列表出现一条抢眼的宽滚动条 */
   .scroll-slim { scrollbar-width: thin; }
   .scroll-slim::-webkit-scrollbar { width: 6px; }
