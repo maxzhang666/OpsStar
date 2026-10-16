@@ -337,6 +337,7 @@
   // 浏览器调 GitHub API 既受CORS 限制也会消耗匿名配额。
   let drawerRepo = null;
   let lastFocus = null;
+  let readmeAbort = null;   // 必须早于 loadReadme 声明，否则 let 的 TDZ 会让赋值抛 ReferenceError
 
   const byFullName = n => (D.repos || []).find(r => r.fullName === n);
 
@@ -462,19 +463,172 @@
           <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.features'))}</h3>
           <div class="flex flex-wrap gap-1">${features.map(x => badge(esc(x))).join('')}</div>
         </section>` : ''}
+
+        <section id="readmeSection" class="mt-6 hidden">
+          <h3 class="mb-2 text-xs font-medium text-muted-foreground">${esc(t('drawer.readme'))}</h3>
+          <div id="readmeBody" class="text-sm leading-relaxed"></div>
+        </section>
       </div>
 
       <footer class="flex gap-2 border-t px-5 py-3">
+        <button type="button" onclick="F.readme()" aria-expanded="false" id="readmeToggle"
+                class="inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-accent">
+          ${icon('book', 'size-4')}<span>${esc(t('drawer.readme'))}</span>
+        </button>
         <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer"
-           class="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90">
+           class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90">
           ${icon('github', 'size-4')}${esc(t('repo.visit'))}
-        </a>
-        <a href="${esc(r.url)}/stargazers" target="_blank" rel="noopener noreferrer"
-           class="inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent">
-          ${icon('star', 'size-4')}${esc(t('drawer.stargazers'))}
         </a>
       </footer>
     </aside>`;
+  }
+
+  // ---------- README 预览 ----------
+  // 运行时按需请求，不进 data.js：1222 个 README 均值约 5 KB，
+  // 预取会让产物涨到 6 MB。GitHub API 允许跨域（access-control-allow-origin: *），
+  // 所以浏览器直连没问题。
+  // 代价是每位访客有自己的 60 次/小时匿名配额，够看几十个仓库。
+  const readmeCache = new Map();
+
+  // 极简 Markdown → HTML。目标只是「能读」，不是完整实现：
+  // 先抽掉图片/HTML 块，再处理标题、列表、代码、链接、加粗、行内代码。
+  function mdToHtml(md, base) {
+    const text = String(md || '');
+    if (!text.trim()) return '';
+
+    const lines = text.split('\n');
+    const out = [];
+    let inCode = false, inList = false, para = [];
+
+    const flushPara = () => {
+      if (para.length) { out.push('<p>' + inline(para.join(' '), base) + '</p>'); para = []; }
+    };
+    const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+
+    for (let raw of lines) {
+      const line = raw.replace(/\s+$/, '');
+
+      // 代码块
+      if (/^\s*```/.test(line)) {
+        flushPara(); closeList();
+        if (!inCode) { out.push('<pre class="readme-pre"><code>'); inCode = true; }
+        else { out.push('</code></pre>'); inCode = false; }
+        continue;
+      }
+      if (inCode) { out.push(esc(raw) + '\n'); continue; }
+
+      // 图片独占一行：直接丢弃，README 里 badge 图太多
+      if (/^\s*!\[.*\]\(.*\)\s*$/.test(line)) { flushPara(); closeList(); continue; }
+      // HTML 块（<p align=center> 之类）：丢弃，避免注入
+      if (/^\s*<[^>]+>/.test(line)) { flushPara(); closeList(); continue; }
+
+      // 标题
+      const h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        flushPara(); closeList();
+        const lv = Math.min(h[1].length + 2, 6);   // README 的 h1 当正文里的 h3
+        out.push(`<h${lv} class="readme-h">${inline(h[2], base)}</h${lv}>`);
+        continue;
+      }
+
+      // 引用
+      const q = line.match(/^>\s?(.*)$/);
+      if (q) { flushPara(); closeList(); out.push(`<blockquote class="readme-quote">${inline(q[1], base)}</blockquote>`); continue; }
+
+      // 分隔线
+      if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { flushPara(); closeList(); out.push('<hr class="readme-hr">'); continue; }
+
+      // 列表
+      const li = line.match(/^\s*[-*+]\s+(.*)$/);
+      if (li) {
+        flushPara();
+        if (!inList) { out.push('<ul class="readme-ul">'); inList = true; }
+        out.push(`<li>${inline(li[1], base)}</li>`);
+        continue;
+      }
+      closeList();
+
+      // 分隔线（三横线常被当成列表前的 hr）
+      if (!line.trim()) { flushPara(); closeList(); continue; }
+
+      para.push(line.trim());
+    }
+    flushPara(); closeList();
+    if (inCode) out.push('</code></pre>');
+    return out.join('');
+  }
+
+  // 行内元素。所有文本都先转义再插入，避免 README 里的 HTML/XSS。
+  // base 必须显式传入：inline 是独立函数，拿不到 mdToHtml 的参数。
+  function inline(s, base) {
+    let x = esc(s);
+    // 缩略链接 ![alt](url) → alt 文本
+    x = x.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+    // 链接。README 来自任意第三方仓库，javascript:/data: 这类伪协议必须拦掉，
+    // 否则点一下就执行脚本。只放行 http(s)、站内相对路径和锚点。
+    x = x.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, txt, href) => {
+      const safe = /^(https?:\/\/|#)/i.test(href) ? href : base + href;
+      return `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${txt}</a>`;
+    });
+    x = x.replace(/`([^`]+)`/g, '<code class="readme-code">$1</code>');
+    x = x.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    x = x.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    x = x.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    return x;
+  }
+
+  async function loadReadme(r) {
+    const section = document.getElementById('readmeSection');
+    const body = document.getElementById('readmeBody');
+    const btn = document.getElementById('readmeToggle');
+    if (!section || !body) return;
+
+    // 再次点击= 收起
+    if (!section.classList.contains('hidden')) {
+      section.classList.add('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      return;
+    }
+
+    section.classList.remove('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+
+    if (readmeCache.has(r.fullName)) {
+      body.innerHTML = readmeCache.get(r.fullName);
+      return;
+    }
+
+    body.innerHTML = `<p class="text-xs text-muted-foreground">${esc(t('readme.loading'))}</p>`;
+
+    try {
+      readmeAbort = new AbortController();
+      const res = await fetch(`https://api.github.com/repos/${r.fullName}/readme`, {
+        headers: { Accept: 'application/vnd.github.raw' },
+        signal: readmeAbort.signal,
+      });
+      readmeAbort = null;
+      if (res.status === 404) {
+        body.innerHTML = `<p class="text-xs text-muted-foreground">${esc(t('readme.none'))}</p>`;
+        readmeCache.set(r.fullName, body.innerHTML);
+        return;
+      }
+      if (res.status === 403 || res.status === 429) {
+        body.innerHTML = `<p class="text-xs text-amber-700 dark:text-amber-400">${esc(t('readme.rateLimited'))}</p>`;
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      const md = await res.text();
+      const html = mdToHtml(md, r.url + '/blob/HEAD/');
+      const out = html
+        ? html
+        : `<p class="text-xs text-muted-foreground">${esc(t('readme.empty'))}</p>`;
+      body.innerHTML = out;
+      readmeCache.set(r.fullName, out);
+    } catch (e) {
+      if (e.name === 'AbortError') return;   // 关抽屉导致的中断，静默忽略
+      body.innerHTML = `<p class="text-xs text-muted-foreground">${esc(t('readme.failed'))}</p>`;
+    }
   }
 
   function fmtBytes(n) {
@@ -516,6 +670,8 @@
 
   function closeDrawer() {
     if (!drawerRepo) return;
+    // 中止在途请求，否则响应回来会写进已销毁的容器
+    if (readmeAbort) { readmeAbort.abort(); readmeAbort = null; }
     drawerRepo = null;
     const host = document.getElementById('drawerHost');
     if (host) { host.innerHTML = ''; host.classList.add('hidden'); }
@@ -559,6 +715,7 @@
     openDrawer(name) { openDrawer(name); },
     closeDrawer() { closeDrawer(); },
     topic(x) { f.q = ''; f.topic = x; f.limit = PAGE; render(); closeDrawer(); },
+    readme() { if (drawerRepo) loadReadme(drawerRepo); },
   };
 
   // ---------- 下拉菜单（主题切换） ----------
