@@ -12,9 +12,11 @@
 
 ## 使用方式
 
-一个 action，声明在自己的 workflow 里。参考 `simonecorsi/mawesome` 的用法，差别在于产出：
-mawesome 把 `data.json` 和渲染后的 `README.md` 提交回当前分支，本 action 推送一套
-可直接被 Pages 托管的页面文件到指定分支。
+一个 action，声明在自己的 workflow 里。
+
+workflow 会抓取你的 star、构建站点，并把一套页面文件推送到指定分支
+（默认 `gh-pages`）。根目录是 `index.html`、`app.js`、`app.css`、`i18n.js`、
+`data.js` 和 `.nojekyll`，GitHub Pages 可直接托管。
 
 新建 `.github/workflows/stars.yml`：
 

@@ -27,17 +27,20 @@ jobs:
 跑完后站点文件会推到 `gh-pages` 分支（可配置），根目录是 `index.html`、
 `app.js`、`app.css`、`i18n.js`、`data.js`、`.nojekyll`，GitHub Pages 可直接托管。
 
-## 与 mawesome 的差别
+## 产出什么
 
-调用方式相同，都是 `uses:` 引用一个仓库。产出不同：
+workflow 往指定分支推送一套页面文件，GitHub Pages 可直接托管：
 
-| | mawesome | 本 action |
-|---|---|---|
-| 产出 | `data.json` + 渲染后的 `README.md` | 完整页面文件（`index.html` 等） |
-| 落地位置 | 提交回当前分支 | 推送到指定分支 |
-| Pages | 无法直接托管 | 可直接托管 |
+| 文件 | 作用 |
+|---|---|
+| `index.html` | 页面入口 |
+| `app.js` / `app.css` | 交互逻辑与样式 |
+| `i18n.js` | 中英文案 |
+| `data.js` | 抓取到的仓库数据 |
+| `.nojekyll` | 让 Pages 原样发布，不走 Jekyll 构建 |
 
-所以 mawesome 生成的仓库不能直接开 Pages，本 action 可以。
+产物不提交到仓库的代码分支，因此不会产生 commit，
+也就不会被 `push` 触发器再次触发。
 
 ---
 
