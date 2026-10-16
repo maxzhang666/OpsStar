@@ -10,11 +10,11 @@
 
 ---
 
-## 在你的仓库里使用
+## 使用方式
 
-不需要 fork，也不需要往自己的仓库拷脚本。两种调用方式，按喜好选一个。
-
-### 方式一：复合 action（推荐，接近 `uses: owner/repo@ref` 的写法）
+一个 action，声明在自己的 workflow 里。参考 `simonecorsi/mawesome` 的用法，差别在于产出：
+mawesome 把 `data.json` 和渲染后的 `README.md` 提交回当前分支，本 action 推送一套
+可直接被 Pages 托管的页面文件到指定分支。
 
 新建 `.github/workflows/stars.yml`：
 
@@ -26,6 +26,7 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
+# 推分支需要写权限。action 不能自行提权，必须由调用方给。
 permissions:
   contents: write
 
@@ -38,54 +39,17 @@ jobs:
           actor: <你的 GitHub 用户名>
 ```
 
-### 方式二：可复用工作流
+产出落在 `gh-pages` 分支，根目录是 `index.html`、`app.js`、`app.css`、`i18n.js`、
+`data.js` 和 `.nojekyll`，Pages 可直接托管。
 
-```yaml
-name: My Stars
-
-on:
-  schedule:
-    - cron: '17 3 * * *'
-  workflow_dispatch:
-
-jobs:
-  build:
-    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
-    permissions:
-      contents: write
-    with:
-      actor: <你的 GitHub 用户名>
-```
-
-两种方式都会抓取数据、构建站点，并推到你仓库的 `gh-pages` 分支。
-
-### 两者差别
-
-| | 复合 action | 可复用工作流 |
-|---|---|---|
-| 写法 | `uses: owner/repo@ref` | `uses: owner/repo/.github/workflows/x.yml@ref` |
-| 调用层级 | step | job |
-| 需自己声明 | `runs-on`、`on:`（定时） | `on:`（定时） |
-| secret 传递 | 只能用 `env:` | 可用 `secrets:` 显式映射 |
-| 状态显示 | 每步单独显示 | 整个 job 一条 |
-
-复合 action 拿不到 `secrets` 上下文，因此需要 PAT 时请用 `env:` 传入：
+star 不超过 6000 个时不需要任何 token。若超过，配一个只勾 `public_repo` 的 PAT，
+通过 `env:` 传入（action 拿不到 `secrets` 上下文，这样日志里仍会被掩码）：
 
 ```yaml
       - uses: maxzhang666/OpsStar@main
         env:
           GH_TOKEN: ${{ secrets.STAR_TOKEN }}
 ```
-
-star 不超过 6000 个时不需要 token，你多半用不上这条。
-
-无论哪种方式，写权限都必须自己给——GitHub 不允许被调用的工作流自行提权。
-
-首次使用前，在仓库 **Settings → Pages → Source** 选择 *Deploy from a branch*（分支 `gh-pages`，目录 `/ (root)`），然后手动触发一次 workflow 生成该分支。
-
-如果通过 `branch` 指定了其他分支名，Pages 的 Source 分支需改成同一个名字，否则站点不会更新。
-
-完整的参数说明、token 配置和故障排查见 [docs/how-to-use.md](docs/how-to-use.md)。
 
 ## 可配置项
 
@@ -153,23 +117,18 @@ cd scripts && npm install
 - 仓库原始对象有 70+ 个字段，`normalize()` 只保留展示层需要的部分，否则 `data.js` 会膨胀到数 MB。
 - 相对时间在抓取阶段即换算为「距今天数」，避免每次构建因时间戳变化产生无意义 diff。
 
-## 部署方式
+## 部署
 
-除可复用工作流外，也可 fork 本仓库自行维护：
+在仓库 **Settings → Pages → Source** 选择 *Deploy from a branch*，
+分支选 `gh-pages`（或你配置的分支名），目录 `/ (root)`。
+之后手动触发一次 workflow 生成该分支，Pages 即可开始托管。
 
-1. fork 到自己的账号
-2. **Settings → Pages → Source** 选择 *Deploy from a branch*（`gh-pages` / `/ (root)`）
-3. Actions 页面手动运行一次 Sync stars
-
-默认不需要配置任何 secret：数据抓取走匿名请求，内置 `GITHUB_TOKEN` 仅用于推送分支。
-
-> ⚠️ 不要用 Actions 内置的 `secrets.GITHUB_TOKEN` 抓取 star。它是 GitHub App 的 installation token，调用 `/user/starred` 会返回 403，因为 integration token 无权访问用户级接口。这也是本项目默认走匿名 + `--actor` 的原因。
-
-匿名请求每小时配额 60 次，约可翻取 6000 个仓库。超过该量级时，在 **Settings → Secrets → Actions** 新建 PAT（勾选 `public_repo`），并映射到 `star_token`。
+如果通过 `branch` 指定了其他分支名，Pages 的 Source 分支需改成同一个名字。
 
 ## 目录结构
 
 ```
+action.yml                 GitHub Action 入口
 scripts/
   fetch_stars.py           抓取与归一化
   build_site.py            组装静态站
@@ -179,9 +138,13 @@ scripts/
     app.js                 筛选、搜索、排序、无限滚动
     i18n.js                中英文案
     app.css                Tailwind 编译产物
-.github/workflows/sync.yml 可复用工作流
 docs/how-to-use.md         调用方文档
+stars-workflow.yml         Stars 仓库的调用示例
+data/stars.json            抓取产物（gitignore）
+dist/                      构建产物（gitignore）
 ```
+
+---
 
 ## 修改样式或文案
 

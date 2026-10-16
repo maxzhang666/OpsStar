@@ -1,15 +1,7 @@
-# 在你自己的 CI 里调用这个 Star 书架
+# 在你自己的 CI 里调用
 
-本项目同时提供两种入口，功能完全相同，按喜好选一种：
-
-- **复合 action** —— 写法是 `uses: maxzhang666/OpsStar@main`，需要自己声明 `runs-on` 和 `on:`
-- **可复用工作流** —— 写法是 `uses: .../.github/workflows/sync.yml@main`，声明在 job 上
-
-两种都不需要 fork，也不需要往仓库里拷脚本。下面的示例以复合 action 为主。
-
-## 最小可用
-
-把这个文件复制到你的仓库：`.github/workflows/stars.yml`，改掉 `actor` 就行。
+一个 GitHub Action。把下面这段放进你仓库的 `.github/workflows/stars.yml` 就能用，
+不需要 fork 本仓库，也不需要拷任何脚本。
 
 ```yaml
 name: My Stars
@@ -19,6 +11,7 @@ on:
     - cron: '17 3 * * *'        # 每天跑一次；不需要定时就删掉这段
   workflow_dispatch:             # 保留就能在 Actions 页面手动触发
 
+# 推分支需要写权限。action 不能自行提权，必须由调用方给。
 permissions:
   contents: write
 
@@ -31,83 +24,20 @@ jobs:
           actor: <你的 GitHub 用户名>   # ← 唯一必填项
 ```
 
-若想用可复用工作流，把 jobs 部分换成：
+跑完后站点文件会推到 `gh-pages` 分支（可配置），根目录是 `index.html`、
+`app.js`、`app.css`、`i18n.js`、`data.js`、`.nojekyll`，GitHub Pages 可直接托管。
 
-```yaml
-jobs:
-  build:
-    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
-    permissions:
-      contents: write
-    with:
-      actor: <你的 GitHub 用户名>
-```
+## 与 mawesome 的差别
 
----
+调用方式相同，都是 `uses:` 引用一个仓库。产出不同：
 
-## 用法一：最小可用（三行就够）
+| | mawesome | 本 action |
+|---|---|---|
+| 产出 | `data.json` + 渲染后的 `README.md` | 完整页面文件（`index.html` 等） |
+| 落地位置 | 提交回当前分支 | 推送到指定分支 |
+| Pages | 无法直接托管 | 可直接托管 |
 
-```yaml
-name: My Stars
-
-on:
-  schedule:
-    - cron: '17 3 * * *'        # 每天跑一次；不需要定时就删掉这段
-  workflow_dispatch:             # 保留就能在 Actions 页面手动触发
-
-jobs:
-  build:
-    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
-    with:
-      actor: <你的 GitHub 用户名>   # ← 唯一必填项
-```
-
-跑完站点就发布到**你这个仓库**的 `gh-pages` 分支。
-
----
-
-## 用法二：自定义标题和语言
-
-```yaml
-jobs:
-  build:
-    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
-    with:
-      actor: <你的 GitHub 用户名>
-      title: My Star Shelf
-      desc: Repositories I bookmarked in 2026
-      lang: en                # en 或 zh-CN
-```
-
----
-
-## 用法三：star 超过 6000 个时才需要 token
-
-匿名请求每小时 60 次，约能翻 6000 个仓库。超过这个量级，去
-**Settings → Secrets and variables → Actions** 新建一个 secret（叫什么都行，这里用
-`STAR_TOKEN`），填一个只勾 `public_repo` 权限的 PAT。
-
-复合 action 拿不到 `secrets` 上下文，所以要用 `env:` 传（这样日志里仍会被掩码）：
-
-```yaml
-      - uses: maxzhang666/OpsStar@main
-        env:
-          GH_TOKEN: ${{ secrets.STAR_TOKEN }}
-        with:
-          actor: <你的 GitHub 用户名>
-```
-
-用可复用工作流则可以走 `secrets:`：
-
-```yaml
-jobs:
-  build:
-    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
-    with:
-      actor: <你的 GitHub 用户名>
-    secrets:
-      star_token: ${{ secrets.STAR_TOKEN }}
-```
+所以 mawesome 生成的仓库不能直接开 Pages，本 action 可以。
 
 ---
 
@@ -123,8 +53,7 @@ jobs:
 | `lang` | 界面默认语言 | `zh-CN` |
 | `branch` | 站点发布到哪个分支 | `gh-pages` |
 
-> 这些是 OpsStar 脚本的命令行参数。别人调用时通过 `with:` 传同名参数，
-> 由工作流负责翻译 —— 你不需要知道命令行怎么写。
+> 这些参数通过 `with:` 传入同名 key 即可。
 
 ---
 
@@ -156,24 +85,23 @@ jobs:
 
 ---
 
-## ⚠️ 两个必须知道的点
+## 三个必须知道的点
 
-**1. 你的工作流必须自己给写权限。** GitHub 不允许被调用的工作流提权，所以调用方
-不给 `contents: write`，推送发布分支就会失败。带 `schedule` 定时任务时尤其要注意：
+**1. 权限必须自己给。** action 不能自行提权，缺了 `permissions` 推送会失败。
+注意它写在**workflow 顶层**，不是 job 里：
 
 ```yaml
-jobs:
-  build:
-    uses: maxzhang666/OpsStar/.github/workflows/sync.yml@main
-    permissions:
-      contents: write      # ← 没有这行，推送会失败
-    with:
-      actor: <你的 GitHub 用户名>
+permissions:
+  contents: write      # ← 没有这行，推送会失败
 ```
 
 **2. 先开 Pages，否则站点不会上线。** 仓库 Settings → Pages → Source 选
 *Deploy from a branch* → 分支 `gh-pages` → 目录 `/ (root)`。
-第一次要手动跑一次 workflow 生成 `gh-pages` 分支，Pages 才能开始托管。
+第一次要手动跑一次 workflow 生成该分支，Pages 才能开始托管。
+
+**3. 不要让 workflow 自己触发自己。** 别加 `push` 触发器 ——
+本action 把产物推到 `gh-pages`，若 Pages 源分支就是 `gh-pages`，
+下次运行产生的提交会再次触发 workflow，形成循环。只用 `schedule` 和 `workflow_dispatch`。
 
 ---
 

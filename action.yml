@@ -62,6 +62,8 @@ runs:
         fi
         # 每个 run 都是独立 shell，变量要经 GITHUB_ENV 传给后续 step
         echo "SCRIPTS=$SCRIPTS" >> "$GITHUB_ENV"
+        # 中间产物放 runner 临时目录，不污染调用方的工作目录
+        echo "WORK=$RUNNER_TEMP/opsstar" >> "$GITHUB_ENV"
 
     - name: 抓取 star
       shell: bash
@@ -80,12 +82,12 @@ runs:
         TOKEN="${IN_TOKEN:-${GH_TOKEN:-}}"
         echo "抓取 @$ACTOR 的 star"
 
-        ARGS=(--out "$GITHUB_WORKSPACE/data/stars.json" --actor "$ACTOR")
+        ARGS=(--out "$WORK/stars.json" --actor "$ACTOR")
         [ -n "$IN_LIMIT" ] && ARGS+=(--limit "$IN_LIMIT")
         case "${IN_ENRICH:-}" in ''|*[!0-9]*) ;; *) ARGS+=(--enrich "$IN_ENRICH") ;; esac
         [ -n "$TOKEN" ] && export GITHUB_TOKEN="$TOKEN"
 
-        mkdir -p "$GITHUB_WORKSPACE/data"
+        mkdir -p "$WORK"
         python "$SCRIPTS/fetch_stars.py" "${ARGS[@]}"
 
     - name: 构建静态站
@@ -95,7 +97,7 @@ runs:
         IN_DESC: ${{ inputs.desc }}
         IN_LANG: ${{ inputs.lang }}
       run: |
-        ARGS=(--data "$GITHUB_WORKSPACE/data/stars.json" --out "$GITHUB_WORKSPACE/dist")
+        ARGS=(--data "$WORK/stars.json" --out "$WORK/dist")
         [ -n "$IN_TITLE" ] && ARGS+=(--title "$IN_TITLE")
         [ -n "$IN_DESC" ]  && ARGS+=(--desc "$IN_DESC")
         [ -n "$IN_LANG" ]  && ARGS+=(--lang "$IN_LANG")
@@ -117,7 +119,7 @@ runs:
           exit 1
         fi
 
-        cd "$GITHUB_WORKSPACE/dist"
+        cd "$WORK/dist"
         git init -q
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

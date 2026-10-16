@@ -5,7 +5,7 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
-# 复合 action 不能自行提权，写权限必须在这里给
+# 推分支需要写权限。action 不能自行提权，必须在这里给。
 permissions:
   contents: write
 
@@ -13,8 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate star site
-        uses: maxzhang666/OpsStar@main
+      - uses: maxzhang666/OpsStar@main
         with:
           actor: maxzhang666
           title: Stars
