@@ -850,7 +850,7 @@
 
         <div class="relative mx-2 hidden max-w-sm flex-1 sm:block lg:ml-6">
           <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">${icon('search', 'size-4')}</span>
-          <input type="search" data-search="header" value="${esc(f.q)}" oninput="F.set('q',this.value)" placeholder="${esc(t('filter.search'))}"
+          <input type="search" data-search="header" value="${esc(f.q)}" placeholder="${esc(t('filter.search'))}"
                  aria-label="${esc(t('filter.search'))}"
                  class="flex h-9 w-full rounded-md border border-input bg-muted/50 py-1 pl-8 pr-3 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30">
         </div>
@@ -904,7 +904,7 @@
               <div class="mb-3 flex flex-wrap items-center gap-2">
                 <div class="relative min-w-48 flex-1">
                   <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">${icon('search', 'size-4')}</span>
-                  <input type="search" data-search="inline" value="${esc(f.q)}" oninput="F.set('q',this.value)" placeholder="${esc(t('filter.search'))}"
+                  <input type="search" data-search="inline" value="${esc(f.q)}" placeholder="${esc(t('filter.search'))}"
                          aria-label="${esc(t('filter.search'))}"
                          class="flex h-8 w-full rounded-md border border-input bg-transparent py-1 pl-8 pr-3 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30">
                 </div>
@@ -957,28 +957,60 @@
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (theme === 'system') applyTheme(); });
 
   // 搜索做节流，避免每敲一个字符就重排上千个节点。
-  // 重渲染会销毁输入框，所以要记住是哪个框、以及光标位置，再原样还原。
+  // 关键：只替换结果区与筛选 chip，不动输入框本身。
+  // 整体重渲染会销毁输入框 DOM，输入法的 composition 状态随之丢失，
+  // 表现为中文只能逐字上屏（拼音还在候选框里就被打断）。
   let timer = null;
+  let syncing = false;
+
+  // 两个搜索框内容保持一致。直接赋值 .value 不会触发 input 事件，
+  // 但仍用 syncing 标记兜底，避免将来有人改成派发事件时形成循环。
+  function syncBoxes(from, value) {
+    syncing = true;
+    document.querySelectorAll('input[type=search]').forEach(x => {
+      if (x !== from && x.value !== value) x.value = value;
+    });
+    syncing = false;
+  }
+
   document.addEventListener('input', e => {
-    if (e.target.type !== 'search') return;
-    clearTimeout(timer);
     const el = e.target;
-    const value = el.value;
-    const caret = el.selectionStart;
-    timer = setTimeout(() => {
-      f.q = value;
-      f.limit = PAGE;
-      render();
-      // header 和结果区各有一个搜索框，且 placeholder 完全相同，
-      // 只能靠 data-search 这个稳定标识回到用户正在用的那一个
-      const key = el.getAttribute('data-search');
-      const target = document.querySelector(`input[type=search][data-search="${key}"]`);
-      if (target) {
-        target.focus();
-        try { target.setSelectionRange(caret, caret); } catch (err) { /* search 类型可能不支持，忽略 */ }
-      }
-    }, 220);
+    if (el.type !== 'search' || syncing) return;
+    clearTimeout(timer);
+
+    // 组合中（拼音还在候选框里）只记值不重绘，等 compositionend 再刷新
+    if (el.dataset.composing === '1') { f.q = el.value; syncBoxes(el, el.value); return; }
+
+    f.q = el.value;
+    f.limit = PAGE;
+    syncBoxes(el, el.value);
+    timer = setTimeout(() => updateResults(), 180);
   });
+
+  // compositionstart 标记当前处于输入法组字状态
+  document.addEventListener('compositionstart', e => {
+    if (e.target.type === 'search') e.target.dataset.composing = '1';
+  });
+  document.addEventListener('compositionend', e => {
+    const el = e.target;
+    if (el.type !== 'search') return;
+    el.dataset.composing = '0';
+    f.q = el.value;
+    f.limit = PAGE;
+    syncBoxes(el, el.value);
+    clearTimeout(timer);
+    timer = setTimeout(() => updateResults(), 0);
+  });
+
+  // 仅刷新结果区，输入框保持原有 DOM 与输入法状态。
+  // statBar 展示的是全局统计，不随搜索变化，无需重绘。
+  function updateResults() {
+    const box = document.getElementById('results');
+    if (box) box.innerHTML = results();
+    const chipBox = document.getElementById('chips');
+    if (chipBox) chipBox.innerHTML = chips();
+    observeTail();
+  }
 
   render();
 
