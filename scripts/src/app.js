@@ -180,10 +180,22 @@
       ${r.archived ? `<div>${badge(icon('archive', 'size-3') + esc(t('repo.archived')), 'border-amber-500/30 text-amber-700 dark:text-amber-300')}</div>` : ''}
       ${(() => {
         const row = metaBadges(r) + (r.isFork ? badge(esc(t('repo.fork'))) : '');
-        return row ? `<div class="mt-auto flex flex-wrap items-center gap-1">${row}</div>` : '';
+        return row ? `<div class="flex flex-nowrap items-center gap-1 overflow-hidden">${row}</div>` : '';
       })()}
-      ${r.topics && r.topics.length ? `<div class="flex flex-wrap gap-1">${r.topics.slice(0, 3).map(x => badge('#' + esc(x))).join('')}${r.topics.length > 3 ? badge('+' + (r.topics.length - 3)) : ''}</div>` : ''}
-      <div class="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+      ${(() => {
+        // topics 数量差异大（4个到 30+都有），按格子数硬切会让卡片高度参差。
+        // 用单行 + 尾部渐隐截断，高度恒定，完整列表在抽屉里看。
+        const tp = (r.topics || []).slice(0, 6);
+        if (!tp.length) return '';
+        return `<div class="relative overflow-hidden">
+          <div class="flex flex-nowrap gap-1">
+            ${tp.map(x => `<span class="shrink-0">${badge('#' + esc(x))}</span>`).join('')}
+            ${r.topics.length > tp.length ? `<span class="shrink-0">${badge('+' + (r.topics.length - tp.length))}</span>` : ''}
+          </div>
+          <span aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-card to-transparent"></span>
+        </div>`;
+      })()}
+      <div class="mt-auto flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
         <span class="inline-flex items-center gap-1">${icon('clock', 'size-3')}${esc(fmtAgo(r.pushedAgo))}</span>
         <span class="inline-flex items-center gap-3">
           <span class="inline-flex items-center gap-1 tabular-nums">${icon('fork', 'size-3')}${fmtNum(r.forks)}</span>
